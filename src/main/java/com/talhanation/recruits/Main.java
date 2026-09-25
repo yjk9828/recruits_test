@@ -191,6 +191,7 @@ public class Main {
                 MessageToClientUpdatePlayerCurrencyCount.class,
                 MessageToClientOpenTakeOverScreen.class,
                 MessageToClientOpenMessengerAnswerScreen.class,
+				MessageTogglePvPGroup.class,
 				MessageTogglePvP.class
         };
 

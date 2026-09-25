@@ -392,6 +392,11 @@ public class CommandEvents {
             recruit.setShouldBlock(shields);
         }
     }
+	public static void onTogglePvPCommand(UUID player_uuid, AbstractRecruitEntity recruit, int group, boolean enable) {
+        if (recruit.isEffectedByCommand(player_uuid, group)) {
+            recruit.setOnlyPvP(enable);
+        }
+    }
     public static void onRangedFireCommand(ServerPlayer serverPlayer, UUID player_uuid, AbstractRecruitEntity recruit, int group, boolean should) {
         if (recruit.isEffectedByCommand(player_uuid, group)){
             recruit.setShouldRanged(should);

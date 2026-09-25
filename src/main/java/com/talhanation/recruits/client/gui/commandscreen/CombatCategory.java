@@ -15,6 +15,7 @@ import net.minecraft.world.item.Items;
 import java.util.List;
 
 public class CombatCategory implements ICommandCategory {
+    // ... (기존 TOOLTIP 및 TEXT 상수 선언부 유지) ...
     private static final MutableComponent TOOLTIP_STRATEGIC_FIRE = Component.translatable("gui.recruits.command.tooltip.strategic_fire");
     private static final MutableComponent TOOLTIP_HOLD_STRATEGIC_FIRE = Component.translatable("gui.recruits.command.tooltip.hold_strategic_fire");
     private static final MutableComponent TOOLTIP_SHIELDS_UP = Component.translatable("gui.recruits.command.tooltip.shields_up");
@@ -39,6 +40,9 @@ public class CombatCategory implements ICommandCategory {
     private static final MutableComponent TEXT_CLEAR_TARGET = Component.translatable("gui.recruits.command.text.clearTargets");
     private static final MutableComponent TOOLTIP_COMBAT = Component.translatable("gui.recruits.command.tooltip.combat");
 
+    // [신규] 클라이언트 토글 상태 유지 변수
+    private static boolean isOnlyPvPEnabled = false;
+
     @Override
     public Component getToolTipName() {
         return TOOLTIP_COMBAT;
@@ -51,7 +55,6 @@ public class CombatCategory implements ICommandCategory {
 
     @Override
     public void createButtons(CommandScreen screen, int x, int y, List<RecruitsGroup> groups, Player player) {
-        // 버튼 활성화 여부는 '그룹이 존재하는가'로 단순화 (선택 여부는 클릭 시 판별)
         boolean isAnyGroupAvailable = groups != null && !groups.isEmpty();
 
         // STRATEGIC FIRE
@@ -190,6 +193,21 @@ public class CombatCategory implements ICommandCategory {
         neutralButton.active = isAnyGroupAvailable;
         screen.addRenderableWidget(neutralButton);
 
+        // AGGRESSIVE
+        RecruitsCommandButton aggressiveButton = new RecruitsCommandButton(x - 100, y + 13, TEXT_AGGRESSIVE,
+                button -> {
+                    List<Integer> targetIds = screen.getSelectedGroupIds();
+                    if (!targetIds.isEmpty()) {
+                        for (Integer id : targetIds) {
+                            Main.SIMPLE_CHANNEL.sendToServer(new MessageAggro(player.getUUID(), 1, id));
+                        }
+                        screen.sendCommandInChat(11);
+                    }
+                });
+        aggressiveButton.setTooltip(Tooltip.create(TOOLTIP_AGGRESSIVE));
+        aggressiveButton.active = isAnyGroupAvailable;
+        screen.addRenderableWidget(aggressiveButton);
+
         // RAID
         RecruitsCommandButton raidButton = new RecruitsCommandButton(x - 100, y + 38, TEXT_RAID,
                 button -> {
@@ -205,19 +223,31 @@ public class CombatCategory implements ICommandCategory {
         raidButton.active = isAnyGroupAvailable;
         screen.addRenderableWidget(raidButton);
 
-        // AGGRESSIVE
-        RecruitsCommandButton aggressiveButton = new RecruitsCommandButton(x - 100, y + 13, TEXT_AGGRESSIVE,
+        // ★ [NEW] ONLY PVP 단일 토글 버튼 (RAID 바로 밑 y + 63)
+        Component initialPvPText = Component.literal(isOnlyPvPEnabled ? "ONLY P: ON" : "ONLY P: OFF");
+        RecruitsCommandButton onlyPvPButton = new RecruitsCommandButton(x - 100, y + 63, initialPvPText,
                 button -> {
                     List<Integer> targetIds = screen.getSelectedGroupIds();
                     if (!targetIds.isEmpty()) {
+                        // 1. 상태 반전
+                        isOnlyPvPEnabled = !isOnlyPvPEnabled;
+
+                        // 2. 패킷 일괄 전송
                         for (Integer id : targetIds) {
-                            Main.SIMPLE_CHANNEL.sendToServer(new MessageAggro(player.getUUID(), 1, id));
+                            Main.SIMPLE_CHANNEL.sendToServer(new MessageTogglePvPGroup(player.getUUID(), id, isOnlyPvPEnabled));
                         }
-                        screen.sendCommandInChat(11);
+
+                        // 3. 버튼 텍스트 및 툴팁 갱신
+                        button.setMessage(Component.literal(isOnlyPvPEnabled ? "ONLY P: ON" : "ONLY P: OFF"));
+                        button.setTooltip(Tooltip.create(Component.literal(isOnlyPvPEnabled 
+                                ? "PvP Only: ON\n(Attacks Players/Recruits Only)" 
+                                : "PvP Only: OFF\n(Attacks All Hostiles)")));
                     }
                 });
-        aggressiveButton.setTooltip(Tooltip.create(TOOLTIP_AGGRESSIVE));
-        aggressiveButton.active = isAnyGroupAvailable;
-        screen.addRenderableWidget(aggressiveButton);
+        onlyPvPButton.setTooltip(Tooltip.create(Component.literal(isOnlyPvPEnabled 
+                ? "PvP Only: ON\n(Attacks Players/Recruits Only)" 
+                : "PvP Only: OFF\n(Attacks All Hostiles)")));
+        onlyPvPButton.active = isAnyGroupAvailable;
+        screen.addRenderableWidget(onlyPvPButton);
     }
 }
