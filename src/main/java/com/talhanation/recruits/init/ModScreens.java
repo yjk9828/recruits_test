@@ -2,7 +2,7 @@ package com.talhanation.recruits.init;
 
 import com.talhanation.recruits.Main;
 import com.talhanation.recruits.client.gui.*;
-import com.talhanation.recruits.client.gui.faction.*;
+import com.talhanation.recruits.client.gui.team.*;
 import com.talhanation.recruits.entities.AbstractLeaderEntity;
 import com.talhanation.recruits.entities.AbstractRecruitEntity;
 import com.talhanation.recruits.entities.AssassinLeaderEntity;
@@ -36,8 +36,9 @@ public class ModScreens {
         registerMenu(COMMAND_CONTAINER_TYPE.get(), CommandScreen::new);
         registerMenu(ASSASSIN_CONTAINER_TYPE.get(), AssassinLeaderScreen::new);
         registerMenu(HIRE_CONTAINER_TYPE.get(), RecruitHireScreen::new);
-        registerMenu(TEAM_EDIT_TYPE.get(), FactionEditScreen::new);
+        registerMenu(TEAM_EDIT_TYPE.get(), TeamEditScreen::new);
         registerMenu(PROMOTE.get(), PromoteScreen::new);
+        registerMenu(PATROL_LEADER.get(), PatrolLeaderScreen::new);
 
         logger.info("MenuScreens registered");
     }

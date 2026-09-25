@@ -12,7 +12,10 @@ import net.minecraft.world.level.pathfinder.SwimNodeEvaluator;
 import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.NotNull;
 
+import java.util.function.BiFunction;
+
 public class AsyncWaterBoundPathNavigation extends AsyncPathNavigation {
+    private static BiFunction<Integer, NodeEvaluator, PathFinder> pathfinderSupplier = (p_26453_, nodeEvaluator) -> new PathFinder(nodeEvaluator, p_26453_);
     private boolean allowBreaching;
 
     private static final NodeEvaluatorGenerator nodeEvaluatorGenerator = () -> {
@@ -23,15 +26,15 @@ public class AsyncWaterBoundPathNavigation extends AsyncPathNavigation {
 
     public AsyncWaterBoundPathNavigation(AsyncPathfinderMob p_26515_, Level p_26516_) {
         super(p_26515_, p_26516_);
+        if(RecruitsServerConfig.UseAsyncPathfinding.get()) {
+            pathfinderSupplier = (p_26453_, nodeEvaluator) -> new AsyncPathfinder(nodeEvaluator, p_26453_, nodeEvaluatorGenerator, this.level);
+        }
     }
 
     protected @NotNull PathFinder createPathFinder(int p_26598_) {
         this.allowBreaching = this.mob.getType() == EntityType.DOLPHIN;
         this.nodeEvaluator = new SwimNodeEvaluator(this.allowBreaching);
-        if (RecruitsServerConfig.UseAsyncPathfinding.get()) {
-            return new AsyncPathfinder(this.nodeEvaluator, p_26598_, nodeEvaluatorGenerator, this.level);
-        }
-        return new PathFinder(this.nodeEvaluator, p_26598_);
+        return pathfinderSupplier.apply(p_26598_, this.nodeEvaluator);
     }
 
     protected boolean canUpdatePath() {

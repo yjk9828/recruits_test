@@ -14,12 +14,12 @@ import java.util.UUID;
 public class MessageDismount implements Message<MessageDismount> {
 
     private UUID uuid;
-    private UUID group;
+    private int group;
 
     public MessageDismount(){
     }
 
-    public MessageDismount(UUID uuid, UUID group) {
+    public MessageDismount(UUID uuid, int group) {
         this.uuid = uuid;
         this.group = group;
 
@@ -38,13 +38,13 @@ public class MessageDismount implements Message<MessageDismount> {
     }
     public MessageDismount fromBytes(FriendlyByteBuf buf) {
         this.uuid = buf.readUUID();
-        this.group = buf.readUUID();
+        this.group = buf.readInt();
         return this;
     }
 
     public void toBytes(FriendlyByteBuf buf) {
         buf.writeUUID(uuid);
-        buf.writeUUID(group);
+        buf.writeInt(group);
     }
 
 }

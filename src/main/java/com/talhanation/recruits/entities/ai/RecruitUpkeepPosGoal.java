@@ -35,19 +35,41 @@ public class RecruitUpkeepPosGoal extends Goal {
     public int timer = 0;
     public boolean setTimer = false;
     public boolean canResetPaymentTimer = false;
+
+    // 최적화 변수
+    private long lastCanUseCheck;
+    private int checkInterval = 60; // 초기값 3초
+    private int scanCooldown = 0;   // 실패 시 재탐색 쿨타임
+
     public RecruitUpkeepPosGoal(AbstractRecruitEntity recruit) {
         this.recruit = recruit;
     }
 
     @Override
     public boolean canUse() {
-        return recruit.needsToGetFood() && recruit.getUpkeepPos() != null;
+        // 1. 배고프지 않으면 즉시 리턴
+        if (!recruit.needsToGetFood()) {
+            return false;
+        }
+
+        long i = this.recruit.getCommandSenderWorld().getGameTime();
+        
+        // 2. 랜덤 쿨타임 적용
+        if (i - this.lastCanUseCheck < this.checkInterval) {
+            return false;
+        }
+        
+        this.lastCanUseCheck = i;
+        this.checkInterval = 60 + this.recruit.getRandom().nextInt(40); // 3~5초 랜덤
+
+        return recruit.getUpkeepPos() != null;
     }
 
     @Override
     public boolean canContinueToUse() {
         return canUse();
     }
+
     @Override
     public void start() {
         super.start();
@@ -57,6 +79,7 @@ public class RecruitUpkeepPosGoal extends Goal {
         messageNeedNewChest = true;
         messageNotInRange = true;
         this.chestPos = recruit.getUpkeepPos();
+        this.scanCooldown = 0; // 시작할 때는 쿨타임 초기화
 
         if(chestPos != null) {
             BlockEntity entity = recruit.getCommandSenderWorld().getBlockEntity(chestPos);
@@ -87,9 +110,23 @@ public class RecruitUpkeepPosGoal extends Goal {
         }
     }
 
-    @Override
+// 3. canAddFood() 메서드: 식량 4개 제한
+    private boolean canAddFood() {
+        int foodCount = 0;
+        boolean hasEmptySlot = false;
+        for (int i = 6; i < 15; i++) {
+            ItemStack stack = recruit.getInventory().getItem(i);
+            if (recruit.canEatItemStack(stack)) foodCount++;
+            if (stack.isEmpty()) hasEmptySlot = true;
+        }
+        return foodCount < 4 && hasEmptySlot;
+    }
+
+	@Override
     public void tick() {
         super.tick();
+        
+        // 1. 목표 상자 위치가 유효한지 검증 (목표가 바뀌었거나 사라졌으면 중단)
         if(this.chestPos != recruit.getUpkeepPos()){
             this.chestPos = recruit.getUpkeepPos();
             this.stop();
@@ -97,86 +134,113 @@ public class RecruitUpkeepPosGoal extends Goal {
         }
 
         if (container != null && chestPos != null){
+            // 2. [수정됨] 이동 로직: 상자가 존재하면 계속 이동 (매번 재검색하지 않음)
             if (--this.timeToRecalcPath <= 0) {
                 this.timeToRecalcPath = this.adjustedTickDelay(10);
                 this.recruit.getNavigation().moveTo(chestPos.getX(), chestPos.getY(), chestPos.getZ(), 1.15D);
             }
 
+            // 점프 로직
             if (recruit.horizontalCollision || recruit.minorHorizontalCollision) {
                 this.recruit.getJumpControl().jump();
             }
 
-            if (chestPos.closerThan(recruit.getOnPos(), 3) && container != null) {
+            // 3. 거리 체크 (6.0D로 여유 있게)
+            if (chestPos.closerThan(recruit.getOnPos(), 6.0D)) {
 
                 this.recruit.getNavigation().stop();
                 this.recruit.getLookControl().setLookAt(chestPos.getX(), chestPos.getY() + 1, chestPos.getZ(), 10.0F, (float) this.recruit.getMaxHeadXRot());
 
+                // 아직 보급 프로세스를 시작하지 않았다면 진입
                 if(!setTimer){
+                    
+                    // [핵심 수정] 상자를 열기 전에 "진짜로 필요한가?"를 최종 확인 (낭비 방지)
+                    // 배도 부르고, 탄약도 충분하고, 강제 명령도 아니라면 -> 그냥 집에 가라.
+                    if (!recruit.forcedUpkeep && !recruit.needsAmmoOrGrenades() && !recruit.needsToEat()) {
+                        this.stop();
+                        return;
+                    }
+
                     if(recruit.paymentTimer == 0){
                         recruit.checkPayment(container);
                         canResetPaymentTimer = true;
                     }
+                    
+                    // 1. 장비/탄약 보급 실행
                     this.recruit.upkeepReequip(container);
+                    
+                    // 2. 타이머 시작 (상호작용 성공)
                     timer = 30;
-                    setTimer = true;
+                    setTimer = true; 
 
+                    // 3. 식량 보급 로직 (수통 점수 반영)
                     if (isFoodInContainer(container)) {
-                        interactChest(container, true);
-                        for (int i = 0; i < 3; i++) {
-                            ItemStack foodItem = this.getFoodFromInv(container);
-                            ItemStack food;
-                            if (foodItem != null && canAddFood()){
-                                food = foodItem.copy();
-                                food.setCount(1);
-                                recruit.getInventory().addItem(food);
-                                foodItem.shrink(1);
-                            } else {
-                                if(recruit.getOwner() != null && message){
-                                    recruit.getOwner().sendSystemMessage(TEXT_NO_PLACE(recruit.getName().getString()));
-                                    message = false;
+                        
+                        int myFoodScore = 0;
+                        Container inv = recruit.getInventory();
+                        
+                        // 인벤토리 스캔하여 식량 점수 계산
+                        for (int i = 0; i < inv.getContainerSize(); i++) {
+                            ItemStack item = inv.getItem(i);
+                            if (item.isEmpty()) continue;
+                            net.minecraft.resources.ResourceLocation id = net.minecraftforge.registries.ForgeRegistries.ITEMS.getKey(item.getItem());
+                            
+                            if (id != null && id.toString().equals("mekanism:canteen")) myFoodScore += 4; 
+                            else if (recruit.canEatItemStack(item)) myFoodScore += item.getCount();
+                        }
+
+                        // 점수가 4점 미만일 때만 상자 상호작용 및 식량 꺼내기
+                        if (myFoodScore < 4) {
+                            interactChest(container, true);
+                            
+                            for (int i = 0; i < 3; i++) {
+                                if (myFoodScore >= 4) break;
+                                ItemStack foodItem = this.getFoodFromInv(container);
+                                if (foodItem != null && canAddFood()) { 
+                                    ItemStack food = foodItem.copy();
+                                    food.setCount(1);
+                                    recruit.getInventory().addItem(food);
+                                    foodItem.shrink(1);
+                                    myFoodScore++; 
+                                } else {
+                                    break;
                                 }
-                                this.stop();
-                                return;
                             }
                         }
                     }
-                    else {
-                        if(recruit.getOwner() != null && message){
-                            recruit.getOwner().sendSystemMessage(TEXT_FOOD(recruit.getName().getString()));
-                            message = false;
-                        }
-                        this.stop();
-                        return;
-                    }
+                    
+                    // 탄약을 챙겼거나 식량을 챙겼다면 타이머 대기 후 종료
                 }
             }
+            // [중요] 거리가 멀 때(else 블록) 아무것도 하지 않음! 
+            // 기존 코드에 있던 findInvPos() 재검색 로직을 삭제하여,
+            // 병사가 상자를 향해 묵묵히 걸어가게 만듦.
         }
         else {
+            // 상자 변수(container) 자체가 null일 때만 새 상자 찾기 시도
+            if (scanCooldown > 0) {
+                scanCooldown--;
+                return;
+            }
             this.chestPos = findInvPos();
-
             if(chestPos == null){
-                if(recruit.getOwner() != null && messageNeedNewChest){
-                    recruit.getOwner().sendSystemMessage(NEED_NEW_UPKEEP(recruit.getName().getString()));
-                    messageNeedNewChest = false;
-                }
-
+                this.scanCooldown = 200; 
                 recruit.clearUpkeepPos();
                 stop();
             }
             else recruit.setUpkeepPos(chestPos);
-            //Main.LOGGER.debug("Chest not found"
         }
 
-
+        // 타이머 로직 (보급 후 1.5초 대기)
         if(setTimer){
             if(timer > 0) timer--;
             if(timer == 0) stop();
         }
     }
+// 2. stop() 메서드: [중요] 조건 불문하고 강제 쿨타임 부여
     @Override
     public void stop() {
         super.stop();
-        recruit.setUpkeepTimer(recruit.getUpkeepCooldown());
         recruit.forcedUpkeep = false;
         timer = 0;
         setTimer = false;
@@ -190,6 +254,11 @@ public class RecruitUpkeepPosGoal extends Goal {
             interactChest(container, false);
             container.setChanged();
         }
+
+        // [핵심 해결책]
+        // 인벤토리에 수류탄이 있든 없든, 부족하다고 착각하든 말든
+        // 상자를 한번 열었다 닫았으면 무조건 3000틱(2분 30초) 동안은 다시 오지 마라.
+        recruit.setUpkeepTimer(recruit.getUpkeepCooldown());
     }
 
     @Nullable
@@ -197,7 +266,8 @@ public class RecruitUpkeepPosGoal extends Goal {
         List<BlockPos> list = new ArrayList<>();
         BlockPos chestPos;
         if(this.recruit.getUpkeepPos() != null) {
-            int range = 8;
+            // 최적화: 탐색 범위를 8 -> 5로 축소 (4096회 반복 -> 1000회 반복)
+            int range = 5; 
             for (int x = -range; x < range; x++) {
                 for (int y = -range; y < range; y++) {
                     for (int z = -range; z < range; z++) {
@@ -235,14 +305,6 @@ public class RecruitUpkeepPosGoal extends Goal {
             }
         }
         return itemStack;
-    }
-
-    private boolean canAddFood(){
-        for(int i = 6; i < 14; i++){
-            if(recruit.getInventory().getItem(i).isEmpty())
-                return true;
-        }
-        return false;
     }
 
     public void interactChest(Container container, boolean open) {

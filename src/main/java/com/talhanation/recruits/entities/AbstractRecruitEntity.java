@@ -2,28 +2,24 @@ package com.talhanation.recruits.entities;
 //ezgi&talha kantar
 
 import com.talhanation.recruits.*;
-import com.talhanation.recruits.RecruitEvent;
-import com.talhanation.recruits.compat.musketmod.IWeapon;
-import com.talhanation.recruits.compat.siegeweapons.SiegeWeapon;
-import com.talhanation.recruits.compat.smallships.SmallShips;
+import com.talhanation.recruits.compat.IWeapon;
 import com.talhanation.recruits.config.RecruitsClientConfig;
 import com.talhanation.recruits.config.RecruitsServerConfig;
 import com.talhanation.recruits.entities.ai.*;
+import com.talhanation.recruits.entities.ai.async.AsyncManager;
+import com.talhanation.recruits.entities.ai.async.AsyncTaskWithCallback;
 import com.talhanation.recruits.entities.ai.compat.BlockWithWeapon;
 import com.talhanation.recruits.entities.ai.navigation.RecruitPathNavigation;
-import com.talhanation.recruits.entities.ai.navigation.RecruitsOpenDoorGoal;
 import com.talhanation.recruits.init.ModItems;
 import com.talhanation.recruits.inventory.DebugInvMenu;
 import com.talhanation.recruits.inventory.RecruitHireMenu;
 import com.talhanation.recruits.inventory.RecruitInventoryMenu;
 import com.talhanation.recruits.network.*;
 import com.talhanation.recruits.world.RecruitsDiplomacyManager;
-import com.talhanation.recruits.world.RecruitsFaction;
-import com.talhanation.recruits.world.RecruitsGroup;
+import com.talhanation.recruits.world.RecruitsTeam;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
 import net.minecraft.nbt.CompoundTag;
-import net.minecraft.nbt.Tag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.network.syncher.EntityDataAccessor;
@@ -44,16 +40,15 @@ import net.minecraft.world.entity.*;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.ai.goal.LookAtPlayerGoal;
+import net.minecraft.world.entity.ai.goal.OpenDoorGoal;
 import net.minecraft.world.entity.ai.goal.RandomLookAroundGoal;
 import net.minecraft.world.entity.ai.navigation.PathNavigation;
 import net.minecraft.world.entity.ai.targeting.TargetingConditions;
 import net.minecraft.world.entity.animal.IronGolem;
-import net.minecraft.world.entity.animal.horse.AbstractHorse;
 import net.minecraft.world.entity.boss.enderdragon.EnderDragon;
 import net.minecraft.world.entity.boss.wither.WitherBoss;
 import net.minecraft.world.entity.monster.Enemy;
 import net.minecraft.world.entity.npc.Villager;
-import net.minecraft.world.entity.npc.VillagerType;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.projectile.AbstractArrow;
@@ -69,7 +64,6 @@ import net.minecraft.world.level.biome.Biomes;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.scores.Team;
-import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.common.Tags;
 import net.minecraftforge.network.NetworkHooks;
 import net.minecraftforge.network.PacketDistributor;
@@ -79,6 +73,26 @@ import org.jetbrains.annotations.NotNull;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.util.*;
+import java.util.function.Consumer;
+import java.util.function.Supplier;
+
+import net.minecraft.world.item.ItemStack;
+
+import mekanism.common.item.ItemNutritionalPasteBucket;
+
+import net.minecraftforge.fluids.FluidUtil;
+import net.minecraftforge.fluids.capability.IFluidHandler;
+import net.minecraftforge.fluids.capability.IFluidHandlerItem;
+import net.minecraftforge.fluids.FluidStack;
+import java.util.Optional;
+
+import net.minecraft.tags.DamageTypeTags;
+
+//jeg
+import ttv.migami.jeg.common.Gun;
+import ttv.migami.jeg.item.GunItem;
+
+import com.talhanation.recruits.entities.ai.controller.LandVehicleController;
 
 public abstract class AbstractRecruitEntity extends AbstractInventoryEntity{
     private static final EntityDataAccessor<Integer> DATA_REMAINING_ANGER_TIME = SynchedEntityData.defineId(AbstractRecruitEntity.class, EntityDataSerializers.INT);
@@ -97,7 +111,7 @@ public abstract class AbstractRecruitEntity extends AbstractInventoryEntity{
     private static final EntityDataAccessor<Boolean> IS_FOLLOWING = SynchedEntityData.defineId(AbstractRecruitEntity.class, EntityDataSerializers.BOOLEAN);
     private static final EntityDataAccessor<Optional<UUID>> MOUNT_ID = SynchedEntityData.defineId(AbstractRecruitEntity.class, EntityDataSerializers.OPTIONAL_UUID);
     private static final EntityDataAccessor<Optional<UUID>> PROTECT_ID = SynchedEntityData.defineId(AbstractRecruitEntity.class, EntityDataSerializers.OPTIONAL_UUID);
-    private static final EntityDataAccessor<Optional<UUID>> GROUP = SynchedEntityData.defineId(AbstractRecruitEntity.class, EntityDataSerializers.OPTIONAL_UUID);
+    private static final EntityDataAccessor<Integer> GROUP = SynchedEntityData.defineId(AbstractRecruitEntity.class, EntityDataSerializers.INT);
     private static final EntityDataAccessor<Integer> XP = SynchedEntityData.defineId(AbstractRecruitEntity.class, EntityDataSerializers.INT);
     private static final EntityDataAccessor<Integer> LEVEL = SynchedEntityData.defineId(AbstractRecruitEntity.class, EntityDataSerializers.INT);
     private static final EntityDataAccessor<Integer> KILLS = SynchedEntityData.defineId(AbstractRecruitEntity.class, EntityDataSerializers.INT);
@@ -113,9 +127,10 @@ public abstract class AbstractRecruitEntity extends AbstractInventoryEntity{
     private static final EntityDataAccessor<Byte> BIOME = SynchedEntityData.defineId(AbstractRecruitEntity.class, EntityDataSerializers.BYTE);
     private static final EntityDataAccessor<Boolean> SHOULD_REST = SynchedEntityData.defineId(AbstractRecruitEntity.class, EntityDataSerializers.BOOLEAN);
     private static final EntityDataAccessor<Boolean> SHOULD_RANGED = SynchedEntityData.defineId(AbstractRecruitEntity.class, EntityDataSerializers.BOOLEAN);
+		// 1. 필드 선언부에 추가 (다른 EntityDataAccessor 아래에)
+	private static final EntityDataAccessor<Boolean> ONLY_PVP = SynchedEntityData.defineId(AbstractRecruitEntity.class, EntityDataSerializers.BOOLEAN);
     public int blockCoolDown;
     public boolean needsTeamUpdate = true;
-    public boolean needsGroupUpdate = true;
     public boolean forcedUpkeep;
     public int dismount = 0;
     public int upkeepTimer = 0;
@@ -126,31 +141,31 @@ public abstract class AbstractRecruitEntity extends AbstractInventoryEntity{
     public int paymentTimer;
     public boolean rotate;
     public float ownerRot;
-    public int rotateTicks;
     public int formationPos = -1;
     private int maxFallDistance;
-    // Stagger periodic work (target search, arrow pickup, LoS re-check) across ticks so the cost
-    // is spread evenly instead of spiking every 20th tick. Derived from the entity id (uniformly
-    // distributed) rather than spawn time, so armies that spawn together still scatter. 60 is the
-    // largest search interval, so id % 60 distributes both the 20-tick and 60-tick cases evenly
-    // (60 is a multiple of 20, so the 20-tick phases stay balanced too).
-    private int getTickPhase() {
-        return Math.floorMod(this.getId(), 60);
-    }
     public Vec3 holdPosVec;
     public boolean isInFormation;
-    public boolean holdFormation;
     public boolean needsColorUpdate = true;
     public float moveSpeed = 1;
     public TargetingConditions targetingConditions;
+		// 데미지 타입 
+	private DamageSource handlingDamageSource;
+	protected LandVehicleController landVehicleController;
+	// [수정됨] 외부에서 접근 및 수정이 가능하도록 public 필드로 승격
+    public double baseSearchRange = 90.0D;       // 기본 병사 탐지 거리
+    public double leaderSearchRange = 150.0D;    // 지휘관 탐지 거리
+    public double giveUpFactor = 1.1D;           // 추격 포기 거리 배율 (감지 거리의 1.1배)
+	private LivingEntity cachedProtectingMob;
+	private int protectingMobCacheTick = -1;
 
     public AbstractRecruitEntity(EntityType<? extends AbstractInventoryEntity> entityType, Level world) {
         super(entityType, world);
         this.xpReward = 6;
         this.navigation = this.createNavigation(world);
-        this.targetingConditions = TargetingConditions.forCombat().ignoreInvisibilityTesting().ignoreLineOfSight().selector(this::shouldAttack);
-        this.setMaxUpStep(1F);
+        this.targetingConditions = TargetingConditions.forCombat().ignoreInvisibilityTesting().selector(this::shouldAttack);
+        this.setMaxUpStep(1.25F);
         this.setMaxFallDistance(1);
+		this.landVehicleController = new LandVehicleController(this);
     }
 
     ///////////////////////////////////NAVIGATION/////////////////////////////////////////
@@ -180,31 +195,16 @@ public abstract class AbstractRecruitEntity extends AbstractInventoryEntity{
     }
 
     ///////////////////////////////////TICK/////////////////////////////////////////
-
-    @Override
-    protected float tickHeadTurn(float yRot, float animStep) {
-        if(this.rotateTicks > 0 && this.getNavigation().isDone()) {
-            this.yBodyRot = this.ownerRot;
-            this.yHeadRot = this.ownerRot;
-            return 0;
-        }
-        return super.tickHeadTurn(yRot, animStep);
-    }
-
     // @Override
     public void aiStep(){
         super.aiStep();
         updateSwingTime();
         updateShield();
-
-        if (this.getCommandSenderWorld().isClientSide()) return;
-
-        if(needsColorUpdate && this.getTeam() != null) updateColor(this.getTeam().getName());
-        if(this instanceof IRangedRecruit  && (this.tickCount + getTickPhase()) % 20 == 0) pickUpArrows();
+        if(this instanceof IRangedRecruit  && this.tickCount % 20 == 0) pickUpArrows();
         if(needsTeamUpdate) updateTeam();
-        if(needsGroupUpdate) updateGroup();
-
+        if(needsColorUpdate && this.getTeam() != null) updateColor(this.getTeam().getName());
     }
+	@Override
     public void tick() {
         super.tick();
         if(this.level().isClientSide()) return;
@@ -222,8 +222,13 @@ public abstract class AbstractRecruitEntity extends AbstractInventoryEntity{
 
         if(getMountTimer() > 0) setMountTimer(getMountTimer() - 1);
         if(getUpkeepTimer() > 0) setUpkeepTimer(getUpkeepTimer() - 1);
-        if(getHunger() >=  70F && getHealth() < getMaxHealth()){
-            this.heal(1.0F/50F);// 1 hp in 2.5s
+// ★ 여기 추가: 자연스러운 허기 감소 로직 실행
+        if(this.tickCount % 20 == 0) { // 1초마다 실행
+            this.updateHunger(); 
+        }
+
+        if(getHunger() >= 70F && getHealth() < getMaxHealth()){
+            this.heal(1.0F/50F);
         }
 
         if(this.reachedMovePos){
@@ -234,69 +239,211 @@ public abstract class AbstractRecruitEntity extends AbstractInventoryEntity{
         if(this.attackCooldown > 0) this.attackCooldown--;
 
 
-        if(this.isAlive() && this.getState() != 3 && (this.tickCount + getTickPhase()) % getTargetSearchInterval() == 0){
-            this.searchForTargets();
+        if(this.isAlive() && this.tickCount % 20 == 0 && this.getState() != 3){
+            searchForTargetsAsync();
         }
+			// [신규 기능] 나침반 텔레포트 로직 호출 (10틱마다 검사)
+		if (this.tickCount % 10 == 0) {
+			this.checkCompassTeleport();
+		}
 
         LivingEntity currentTarget = this.getTarget();
-        if(currentTarget != null && (currentTarget.isDeadOrDying() || currentTarget.isRemoved())) this.setTarget(null);
+        
+        if (currentTarget != null) {
+            // 1. 타겟이 죽거나 월드에서 제거되었으면 타겟 해제
+            if (currentTarget.isDeadOrDying() || currentTarget.isRemoved()) {
+                this.setTarget(null);
+            } 
+            // 2. 타겟이 인식 범위를 벗어났으면 추격 포기 (Leashing 로직)
+            else {
+                // [변경됨] 하드코딩 제거 -> 멤버 변수 사용
+                double limitRange = this.baseSearchRange; 
 
-            // Option 2 safety net: drop a target that is no longer visible, covering the case where a
-            // recruit saw an enemy but lost sight before any attack/move goal took over (e.g. target
-            // stepped behind cover while still out of melee range). Throttled so that, in the worst
-            // case where no goal queried line of sight this tick, we don't run a raycast every tick per
-            // recruit. EntitySensing caches per tick, so when a goal already queried LoS this is free.
-        else if(currentTarget != null && (this.tickCount + getTickPhase()) % 10 == 0 && !this.getSensing().hasLineOfSight(currentTarget)){
-            this.setTarget(null);
-        }
+                if (this instanceof ScoutEntity) {
+                    limitRange = this.baseSearchRange;
+                }
+                else if (this instanceof AbstractLeaderEntity) {
+                    limitRange = this.leaderSearchRange; // 지휘관 변수 사용
+                }
+                else if (this instanceof IRangedRecruit) { 
+                    limitRange = this.baseSearchRange;
+                }
+                else if (this instanceof HorsemanEntity) {
+                    limitRange = this.baseSearchRange;
+                }
+                else if (this instanceof MessengerEntity) {
+                    limitRange = this.baseSearchRange;
+                }
 
-        // Handle face rotation command
-        if(this.rotateTicks > 0) {
-            if(this.getNavigation().isDone()) {
-                this.setYRot(this.ownerRot);
-                this.yRotO = this.ownerRot;
-                this.rotateTicks--;
+                // [변경됨] 하드코딩 1.1D 제거 -> 멤버 변수 giveUpFactor 사용
+                // 인식 거리보다 설정된 배율만큼 더 멀어지면 추격 포기
+                double giveUpDistance = limitRange * this.giveUpFactor;
+
+                // 거리 제곱 비교 (최적화)
+                if (this.distanceToSqr(currentTarget) > (giveUpDistance * giveUpDistance)) {
+                    this.setTarget(null);
+                }
             }
         }
+		
+// [문제의 원인 해결]
+        // 병사가 LandVehicle에 타고 있다면 컨트롤러를 작동시킵니다.
+        if (this.getVehicle() instanceof com.talhanation.smallships.world.entity.ship.LandVehicle) {
+            
+            // [★수정] 대포(LandCannon)에 타고 있고 + 타겟이 있어서 조준 중이라면?
+            // 운전 컨트롤러(landVehicleController)를 끄고, 공격 Goal(RecruitLandCannonAttackGoal)이 회전을 전담하게 합니다.
+            boolean isManningCannon = this.getVehicle() instanceof com.talhanation.smallships.world.entity.ship.LandCannonEntity;
+            boolean isAiming = this.getTarget() != null && this.getTarget().isAlive();
 
-    }
-
-    /**
-     * Adaptive cadence for the (expensive) area target scan.
-     * A recruit that already has a live target does not need to re-scan the full
-     * 80x80x80 box every second - that scan is the real main-thread cost in big battles.
-     * Idle recruits keep the original 20-tick responsiveness for first contact.
-     */
-    private int getTargetSearchInterval() {
-        LivingEntity target = this.getTarget();
-        if (target != null && target.isAlive() && !target.isRemoved()) {
-            return 60;
+            // 대포를 잡고 조준 중일 때는 컨트롤러 틱을 실행하지 않음 (회전 간섭 방지)
+            if (!(isManningCannon && isAiming)) {
+                this.landVehicleController.tick();
+            }
         }
-        return 20;
+		// ★ [추가됨] 구덩이 탈출을 위한 제한적 벽 타기 로직 호출
+		//this.checkAndPerformWallClimb();
     }
+/**
+ * 병사가 이동 중 벽(구덩이)에 막혔을 때,
+ * 앞의 벽이 단단한 블록이고 그 위가 뚫려있다면 벽을 타고 오릅니다.
+ */
+	private void checkAndPerformWallClimb() {
+		// 1. [추가됨] Hold Position(대기, State 2) 모드일 때는 작동 금지
+		// (참호나 벙커 등에서 위치 사수 중일 때 벽을 타고 튀어 나가는 것을 방지)
+		if (this.getFollowState() == 2) return;
 
-    public void searchForTargets() {
+		// 2. 트리거 체크: 벽에 부딪혔거나(horizontalCollision), 이동 중인데 제자리걸음인 경우
+		boolean isStuck = this.horizontalCollision || 
+						  (!this.getNavigation().isDone() && this.getDeltaMovement().horizontalDistanceSqr() < 1.0E-6);
+
+		if (!isStuck) return;
+		
+		// 이미 웅크리고 있거나, 타고 있는 중이면 실행 안함
+		if (this.isCrouching() || this.isPassenger()) return;
+
+		// 3. 바라보는 방향의 바로 앞 블록 확인
+		net.minecraft.core.Direction facing = this.getDirection();
+		BlockPos currentPos = this.blockPosition();
+		BlockPos frontPos = currentPos.relative(facing);
+
+		// 4. 벽 상태 분석
+		Level level = this.level();
+		
+		// 높이 1 (다리~몸통): 여기가 막혀 있어야 "벽"이라고 인지함
+		BlockPos wallBase = frontPos.above(0); 
+		BlockPos wallMid = frontPos.above(1); // 높이 2 (머리)
+		
+		// 적어도 1칸 또는 2칸 높이에 '단단한 블록'이 있어야 함 (허공에 점프 방지)
+		boolean hasSolidWall = level.getBlockState(wallBase).blocksMotion() || 
+							   level.getBlockState(wallMid).blocksMotion();
+
+		if (!hasSolidWall) return;
+
+		// 5. 탈출구(착지 지점) 스캔 (높이 2칸~3칸)
+		boolean canClimb = false;
+		
+		// 머리 높이(2칸) 혹은 점프 높이(3칸) 중 하나라도 뚫려있으면 등반 가능
+		for (int i = 1; i <= 3; i++) {
+			BlockPos checkPos = frontPos.above(i);
+			net.minecraft.world.level.block.state.BlockState state = level.getBlockState(checkPos);
+			
+			// 이동을 방해하지 않는 블록(공기 등)을 발견하면 거기로 올라감
+			if (!state.blocksMotion() || state.getCollisionShape(level, checkPos).isEmpty()) {
+				canClimb = true;
+				break;
+			}
+		}
+
+		// 6. 등반 실행
+		if (canClimb) {
+			Vec3 motion = this.getDeltaMovement();
+			
+			// 점프와 유사한 강한 상승 속도 부여 (0.2 -> 0.42)
+			double climbSpeed = 0.42D; 
+			
+			// 벽 쪽으로 밀어붙이는 힘
+			double pushForce = 0.1D;
+			double newX = facing.getStepX() * pushForce;
+			double newZ = facing.getStepZ() * pushForce;
+
+			// 기존 수평 속도가 있다면 유지하되, 벽 쪽으로 최소한의 힘은 가함
+			if (Math.abs(motion.x) > 0.05) newX = motion.x;
+			if (Math.abs(motion.z) > 0.05) newZ = motion.z;
+
+			this.setDeltaMovement(newX, climbSpeed, newZ);
+			
+			// 클라이언트 동기화
+			this.hasImpulse = true; 
+			
+			// 낙하 데미지 초기화
+			this.fallDistance = 0.0F;
+		}
+	}
+
+	private void searchForTargetsAsync() {
         if (!(this.getCommandSenderWorld() instanceof ServerLevel serverLevel)) return;
 
-        searchForTargetsSync(serverLevel);
-    }
+        // --------------------------------------------------------
+        // [변경됨] 엔티티 타입에 따라 동적으로 탐지 범위(Search Range) 설정
+        // --------------------------------------------------------
+        // 하드코딩 제거 -> 멤버 변수 사용
+        double searchRange = this.baseSearchRange;
 
-    private void searchForTargetsSync(ServerLevel serverLevel) {
-        AABB searchBox = this.getBoundingBox().inflate(40);
+        // 1. 정찰병
+        if (this instanceof ScoutEntity) {
+            searchRange = this.baseSearchRange; 
+        }
+        // 2. 지휘관 계열 (CaptainEntity, PatrolLeaderEntity 포함)
+        else if (this instanceof AbstractLeaderEntity) {
+            searchRange = this.leaderSearchRange; // 지휘관 변수 사용
+        }
+        // 3. 원거리 유닛 (Bowman, CrossBowman, Nomad 포함) - 인터페이스 체크
+        else if (this instanceof IRangedRecruit) {
+            searchRange = this.baseSearchRange;
+        }
+        // 4. 기병 (Horseman)
+        else if (this instanceof HorsemanEntity) {
+            searchRange = this.baseSearchRange;
+        }
+        // 5. 전령 (전투원 아님, 최소 방어)
+        else if (this instanceof MessengerEntity) {
+            searchRange = this.baseSearchRange;
+        }
+
+        // 설정된 범위를 적용
+        AABB searchBox = this.getBoundingBox().inflate(searchRange);
+        // --------------------------------------------------------
+
         List<LivingEntity> nearby = serverLevel.getEntitiesOfClass(
                 LivingEntity.class,
                 searchBox,
-                potTarget -> potTarget != this && targetingConditions.test(this, potTarget)
+                entity -> entity != this
         );
 
-        if (nearby.isEmpty()) return;
+        //MULTI THREADED
+        Supplier<List<LivingEntity>> findTargetsTask = () -> {
+            List<LivingEntity> copy = new ArrayList<>(nearby);
+            copy.removeIf(potTarget -> !targetingConditions.test(this, potTarget));
+            copy.sort(Comparator.comparingDouble(e -> e.distanceToSqr(this)));
+            return copy.stream().limit(12).toList();
+        };
 
-        nearby.sort(Comparator.comparingDouble(e -> e.distanceToSqr(this)));
+        Consumer<List<LivingEntity>> handleTargets = targets -> {
+            if (!targets.isEmpty()) {
+                this.setTarget(targets.get(this.getRandom().nextInt(targets.size())));
+            }
+        };
 
-        int pool = Math.min(10, nearby.size());
-        LivingEntity target = nearby.get(this.getRandom().nextInt(pool));
-        this.setTarget(target);
+        AsyncManager.executor.execute(new AsyncTaskWithCallback<>(findTargetsTask, handleTargets, serverLevel));
     }
+		// [AbstractRecruitEntity.java] 내부에 추가
+	public void setBaseSearchRange(double range) {
+		this.baseSearchRange = range;
+	}
+
+	public double getBaseSearchRange() {
+		return this.baseSearchRange;
+	}
 
     private void recruitCheckDespawn() {
         if(this.isOwned()) return;
@@ -327,6 +474,10 @@ public abstract class AbstractRecruitEntity extends AbstractInventoryEntity{
         getAttribute(Attributes.MOVEMENT_SPEED).addPermanentModifier(new AttributeModifier("speed_bonus", this.random.nextDouble() * 0.1D, AttributeModifier.Operation.MULTIPLY_BASE));
     }
 
+    public void setDropEquipment(){
+        this.dropEquipment();
+    }
+
     ////////////////////////////////////REGISTER////////////////////////////////////
 
     protected void registerGoals() {
@@ -335,12 +486,12 @@ public abstract class AbstractRecruitEntity extends AbstractInventoryEntity{
         this.goalSelector.addGoal(1, new RecruitQuaffGoal(this));
         this.goalSelector.addGoal(1, new FleeTNT(this));
         this.goalSelector.addGoal(1, new FleeFire(this));
-        this.goalSelector.addGoal(6, new RecruitsOpenDoorGoal(this, true) {});
+        this.goalSelector.addGoal(6, new OpenDoorGoal(this, true) {});
         this.goalSelector.addGoal(1, new RecruitProtectEntityGoal(this));
         this.goalSelector.addGoal(0, new RecruitEatGoal(this));
         this.goalSelector.addGoal(5, new RecruitUpkeepPosGoal(this));
         this.goalSelector.addGoal(6, new RecruitUpkeepEntityGoal(this));
-        this.goalSelector.addGoal(3, new RecruitMountEntityGoal(this));
+        this.goalSelector.addGoal(3, new RecruitMountEntity(this));
         this.goalSelector.addGoal(3, new RecruitDismountEntity(this));
         this.goalSelector.addGoal(3, new RecruitMoveToPosGoal(this, 1.05D));
         this.goalSelector.addGoal(2, new RecruitFollowOwnerGoal(this, 1.05D, 300, 100));
@@ -349,7 +500,7 @@ public abstract class AbstractRecruitEntity extends AbstractInventoryEntity{
         //this.goalSelector.addGoal(7, new RecruitDodgeGoal(this));
         this.goalSelector.addGoal(4, new RestGoal(this));
         this.goalSelector.addGoal(10, new RecruitWanderGoal(this));
-        this.goalSelector.addGoal(11, new LookAtPlayerGoal(this, Player.class, 8.0F));
+        this.goalSelector.addGoal(11, new LookAtPlayerGoal(this, Player.class, 2.0F));
         this.goalSelector.addGoal(12, new RandomLookAroundGoal(this));
         //this.goalSelector.addGoal(13, new RecruitPickupWantedItemGoal(this));
 
@@ -359,13 +510,13 @@ public abstract class AbstractRecruitEntity extends AbstractInventoryEntity{
         this.targetSelector.addGoal(3, (new RecruitHurtByTargetGoal(this)).setAlertOthers());
         this.targetSelector.addGoal(4, new RecruitOwnerHurtTargetGoal(this));
 
-        this.targetSelector.addGoal(7, new RecruitDefendVillageFromPlayerGoal(this));
+        //this.targetSelector.addGoal(7, new RecruitDefendVillageFromPlayerGoal(this));
     }
 
     protected void defineSynchedData() {
         super.defineSynchedData();
         this.entityData.define(DATA_REMAINING_ANGER_TIME, 0);
-        this.entityData.define(GROUP, Optional.empty());
+        this.entityData.define(GROUP, 0);
         this.entityData.define(SHOULD_FOLLOW, false);
         this.entityData.define(SHOULD_BLOCK, false);
         this.entityData.define(SHOULD_MOUNT, false);
@@ -396,6 +547,7 @@ public abstract class AbstractRecruitEntity extends AbstractInventoryEntity{
         this.entityData.define(BIOME, (byte) 0);
         this.entityData.define(SHOULD_REST, false);
         this.entityData.define(SHOULD_RANGED, true);
+		this.entityData.define(ONLY_PVP, false); // 기본값 false (꺼짐)
         //STATE
         // 0 = NEUTRAL
         // 1 = AGGRESSIVE
@@ -422,7 +574,7 @@ public abstract class AbstractRecruitEntity extends AbstractInventoryEntity{
         nbt.putBoolean("ShouldMount", this.getShouldMount());
         nbt.putBoolean("ShouldProtect", this.getShouldProtect());
         nbt.putBoolean("ShouldBlock", this.getShouldBlock());
-        if(this.getGroup() != null) nbt.putUUID("Group", this.getGroup());
+        nbt.putInt("Group", this.getGroup());
         nbt.putInt("Variant", this.getVariant());
         nbt.putBoolean("Listen", this.getListen());
         nbt.putBoolean("Fleeing", this.getFleeing());
@@ -443,8 +595,8 @@ public abstract class AbstractRecruitEntity extends AbstractInventoryEntity{
         nbt.putBoolean("ShouldRest", this.getShouldRest());
         nbt.putBoolean("ShouldRanged", this.getShouldRanged());
         nbt.putBoolean("isInFormation", this.isInFormation);
-        nbt.putBoolean("holdFormation", this.holdFormation);
         nbt.putInt("paymentTimer", this.paymentTimer);
+		nbt.putBoolean("OnlyPvP", this.isOnlyPvP());
 
         if(this.getHoldPos() != null){
             nbt.putDouble("HoldPosX", this.getHoldPos().x());
@@ -491,14 +643,14 @@ public abstract class AbstractRecruitEntity extends AbstractInventoryEntity{
         else this.despawnTimer = -1;//fixes random recruits disappearing
 
         this.setXpLevel(nbt.getInt("Level"));
-        this.setAggroState(nbt.getInt("AggroState"));
+        this.setState(nbt.getInt("AggroState"));
         this.setFollowState(nbt.getInt("FollowState"));
         this.setShouldFollow(nbt.getBoolean("ShouldFollow"));
         this.setShouldMount(nbt.getBoolean("ShouldMount"));
         this.setShouldBlock(nbt.getBoolean("ShouldBlock"));
         this.setShouldProtect(nbt.getBoolean("ShouldProtect"));
         this.setFleeing(nbt.getBoolean("Fleeing"));
-
+        this.setGroup(nbt.getInt("Group"));
         this.setListen(nbt.getBoolean("Listen"));
         this.setIsFollowing(nbt.getBoolean("isFollowing"));
         this.setXp(nbt.getInt("Xp"));
@@ -516,7 +668,7 @@ public abstract class AbstractRecruitEntity extends AbstractInventoryEntity{
         this.formationPos = (nbt.getInt("formationPos"));
         this.setShouldRest(nbt.getBoolean("ShouldRest"));
         this.isInFormation = nbt.getBoolean("isInFormation");
-        this.holdFormation = nbt.getBoolean("holdFormation");
+		this.setOnlyPvP(nbt.getBoolean("OnlyPvP"));
 
         if(nbt.contains("paymentTimer")){
             this.paymentTimer = (nbt.getInt("paymentTimer"));
@@ -569,22 +721,7 @@ public abstract class AbstractRecruitEntity extends AbstractInventoryEntity{
         }
 
         if(nbt.contains("Biome"))this.setBiome(nbt.getByte("Biome"));
-        else applyBiomeAndVariant(this);
-
-        if(this.getCommandSenderWorld().isClientSide()) return;
-
-        if(nbt.contains("Group")){
-            Tag tag = nbt.get("Group");
-
-            int type = tag.getId();
-            if (type == Tag.TAG_INT) {
-                int oldGroupIndex = nbt.getInt("Group");
-                RecruitEvents.handleGroupBackwardCompatibility(this, oldGroupIndex);
-            }
-            else{
-                this.setGroupUUID(nbt.getUUID("Group"));
-            }
-        }
+        else applyBiomeAndVariant(this);;
     }
 
     ////////////////////////////////////GET////////////////////////////////////
@@ -608,7 +745,7 @@ public abstract class AbstractRecruitEntity extends AbstractInventoryEntity{
 
     @Nullable
     public Player getOwner(){
-        if (this.getOwnerUUID() != null){
+        if (this.isOwned() && this.getOwnerUUID() != null){
             UUID ownerID = this.getOwnerUUID();
             return this.getCommandSenderWorld().getPlayerByUUID(ownerID);
         }
@@ -705,11 +842,9 @@ public abstract class AbstractRecruitEntity extends AbstractInventoryEntity{
     // 1 = AGGRESSIVE
     // 2 = RAID
     // 3 = PASSIVE
-    public UUID getGroup(){
-        return getGroupUUID().isPresent() ? getGroupUUID().get() : null;
-    }
-    public Optional<UUID> getGroupUUID() {
-        return this.entityData.get(GROUP);
+
+    public int getGroup() {
+        return entityData.get(GROUP);
     }
 
 
@@ -764,16 +899,47 @@ public abstract class AbstractRecruitEntity extends AbstractInventoryEntity{
     public boolean getListen() {
         return entityData.get(LISTEN);
     }
+	// 5. Getter / Setter 추가 (클래스 내부 아무데나)
+	public boolean isOnlyPvP() {
+		return this.entityData.get(ONLY_PVP);
+	}
 
-    @Nullable
-    public LivingEntity getProtectingMob(){
-        List<LivingEntity> list = this.getCommandSenderWorld().getEntitiesOfClass(
-                LivingEntity.class,
-                this.getBoundingBox().inflate(64D),
-                (living) -> this.getProtectUUID() != null && living.getUUID().equals(this.getProtectUUID()) && living.isAlive()
-        );
-        return list.isEmpty() ? null : list.get(0);
-    }
+	public void setOnlyPvP(boolean value) {
+		this.entityData.set(ONLY_PVP, value);
+	}
+
+	@Nullable
+	public LivingEntity getProtectingMob() {
+		// 보호 대상 UUID가 없으면 즉시 null 반환
+		if (this.getProtectUUID() == null) {
+			this.cachedProtectingMob = null;
+			return null;
+		}
+
+		// 1. 캐시된 몹이 유효한지 확인 (살아있고, 20틱(1초)이 지나지 않았고, UUID가 일치하는지)
+		if (this.cachedProtectingMob != null && this.cachedProtectingMob.isAlive() &&
+			(this.tickCount - this.protectingMobCacheTick) < 20 &&
+			this.cachedProtectingMob.getUUID().equals(this.getProtectUUID())) {
+			return this.cachedProtectingMob;
+		}
+
+		// 2. 캐시가 만료되었거나 유효하지 않으면 새로 검색 (기존 로직)
+		List<LivingEntity> list = this.getCommandSenderWorld().getEntitiesOfClass(
+				LivingEntity.class,
+				this.getBoundingBox().inflate(32D),
+				(living) -> living.getUUID().equals(this.getProtectUUID()) && living.isAlive()
+		);
+
+		// 3. 검색 결과 캐싱 및 타임스탬프 갱신
+		if (!list.isEmpty()) {
+			this.cachedProtectingMob = list.get(0);
+			this.protectingMobCacheTick = this.tickCount;
+			return this.cachedProtectingMob;
+		} else {
+			this.cachedProtectingMob = null;
+			return null;
+		}
+	}
 
     public int getColor() {
         return entityData.get(COLOR);
@@ -847,33 +1013,21 @@ public abstract class AbstractRecruitEntity extends AbstractInventoryEntity{
     }
 
     public void disband(@Nullable Player player, boolean keepTeam, boolean increaseCost){
-        if (!this.getCommandSenderWorld().isClientSide()) {
-            RecruitEvent.Dismissed dismissEvent = new RecruitEvent.Dismissed(this, player, keepTeam);
-            MinecraftForge.EVENT_BUS.post(dismissEvent);
-            if (dismissEvent.isCanceled()) return;
-        }
         String name = this.getName().getString();
-
+        RecruitEvents.recruitsPlayerUnitManager.removeRecruits(this.getOwnerUUID(), 1);
         if(player != null){
             player.sendSystemMessage(TEXT_DISBAND(name));
         }
 
         this.setTarget(null);
         this.setIsOwned(false);
-
-        if(increaseCost) this.recalculateCost();
-
-        if(this.getCommandSenderWorld().isClientSide()) return;
-        RecruitEvents.recruitsPlayerUnitManager.removeRecruits(this.getOwnerUUID(), 1);
         this.setOwnerUUID(Optional.empty());
 
-        if (this.getTeam() != null && !keepTeam){
-            FactionEvents.removeRecruitFromTeam(this, this.getTeam(), (ServerLevel) this.getCommandSenderWorld());
-        }
+        if(increaseCost) this.recalculateCost();
+        if (this.getTeam() != null){
 
-        if(this.getGroup() != null){
-            RecruitEvents.recruitsGroupsManager.removeMember(this.getGroup(), this.getUUID(), (ServerLevel) this.getCommandSenderWorld());
-            this.setGroupUUID(null);
+            if(!this.getCommandSenderWorld().isClientSide() && !keepTeam)
+                TeamEvents.removeRecruitFromTeam(this, this.getTeam(), (ServerLevel) this.getCommandSenderWorld());
         }
     }
 
@@ -938,8 +1092,8 @@ public abstract class AbstractRecruitEntity extends AbstractInventoryEntity{
         entityData.set(IS_FOLLOWING, bool);
     }
 
-    public void setGroupUUID(UUID uuid){
-        entityData.set(GROUP, uuid == null ? Optional.empty() : Optional.of(uuid));
+    public void setGroup(int group){
+        entityData.set(GROUP, group);
     }
     public void setShouldRest(boolean bool){
         if(bool) setFollowState(0);
@@ -950,7 +1104,7 @@ public abstract class AbstractRecruitEntity extends AbstractInventoryEntity{
         entityData.set(SHOULD_RANGED, should);
     }
 
-    public void setAggroState(int state) {
+    public void setState(int state) {
         switch (state){
             case 0:
             case 3:
@@ -1154,73 +1308,17 @@ public abstract class AbstractRecruitEntity extends AbstractInventoryEntity{
         recruit.setVariant(variant);
     }
 
-    /**
-     * Applies the biome skin + variant to a recruit based on the {@link VillagerType} of the
-     * villager it was created from, so a desert villager yields a desert recruit, a savanna
-     * villager a savanna recruit, and so on. This mirrors the biome -> (biomeByte, variant range)
-     * mapping used by {@link #applyBiomeAndVariant}, but keyed off the villager's actual type
-     * instead of the recruit's current position (which may not be set yet at creation time, and
-     * would otherwise sample whatever biome the recruit happens to stand in).
-     */
-    public static void applyVariantFromVillager(AbstractRecruitEntity recruit, Villager villager){
-        VillagerType type = villager.getVillagerData().getType();
-        byte biomeByte;
-        int variant;
+    ////////////////////////////////////is FUNCTIONS////////////////////////////////////
 
-        if(type == VillagerType.DESERT){
-            biomeByte = 0;
-            variant = recruit.random.nextInt(15, 19);
-        }
-        else if(type == VillagerType.JUNGLE){
-            biomeByte = 1;
-            variant = recruit.random.nextInt(15, 19);
-        }
-        else if(type == VillagerType.SAVANNA){
-            biomeByte = 3;
-            variant = recruit.random.nextInt(15, 19);
-        }
-        else if(type == VillagerType.SNOW){
-            biomeByte = 4;
-            variant = recruit.random.nextInt(5, 10);
-        }
-        else if(type == VillagerType.SWAMP){
-            biomeByte = 5;
-            variant = recruit.random.nextInt(5, 14);
-        }
-        else if(type == VillagerType.TAIGA){
-            biomeByte = 6;
-            variant = recruit.random.nextInt(5, 14);
-        }
-        else { // VillagerType.PLAINS and any unknown/modded type fall back to plains
-            biomeByte = 2;
-            variant = recruit.random.nextInt(0, 14);
-        }
-
-        recruit.setBiome(biomeByte);
-        recruit.setVariant(variant);
-    }
-
-    public boolean isEffectedByCommand(UUID player_uuid) {
-        return isEffectedByCommand(player_uuid, null);
-    }
-
-    public boolean isEffectedByCommand(UUID player_uuid, UUID group) {
-        if (!this.isOwned() || !this.isAlive() || !this.getListen()) return false;
-
-        if (!this.getOwnerUUID().equals(player_uuid)) return false;
-
-        if (group == null) {
-            return true;
-        }
-
-        return this.getGroup() != null && this.getGroup().equals(group);
+    public boolean isEffectedByCommand(UUID player_uuid, int group){
+        return (this.isOwned() && this.isAlive() && (this.getListen()) && Objects.equals(this.getOwnerUUID(), player_uuid) && (this.getGroup() == group || group == 0));
     }
     public boolean isOwned(){
         return getIsOwned();
     }
 
     public boolean isOwnedBy(Player player){
-        return player.getUUID() == this.getOwnerUUID() || player == this.getOwner();
+       return player.getUUID() == this.getOwnerUUID() || player == this.getOwner();
     }
 
     ////////////////////////////////////ON FUNCTIONS////////////////////////////////////
@@ -1233,17 +1331,13 @@ public abstract class AbstractRecruitEntity extends AbstractInventoryEntity{
         if(isPlayerTarget) return InteractionResult.PASS;
 
         if (this.getCommandSenderWorld().isClientSide) {
-            boolean flag = this.isOwnedBy(player) || !this.canBeHired();
+            boolean flag = this.isOwnedBy(player) || this.isOwned() || !this.isOwned();
             return flag ? InteractionResult.CONSUME : InteractionResult.PASS;
         } else {
             if (player.isCreative() && player.getItemInHand(hand).getItem().equals(ModItems.RECRUIT_SPAWN_EGG.get())){
                 openDebugScreen(player);
-                //Main.LOGGER.warn("" + this.getName().getString() + " Target: " + getTarget());
+                Main.LOGGER.warn("" + this.getName().getString() + " Target: " + getTarget());
 
-                return InteractionResult.SUCCESS;
-            }
-            if(this instanceof VillagerNobleEntity noble && !noble.isTrading){
-                noble.openTradeGUI(player);
                 return InteractionResult.SUCCESS;
             }
             if ((this.isOwned() && player.getUUID().equals(this.getOwnerUUID()))) {
@@ -1277,10 +1371,11 @@ public abstract class AbstractRecruitEntity extends AbstractInventoryEntity{
                 }
             }
             else if(this.isOwned() && this.getTeam() != null && !player.getUUID().equals(this.getOwnerUUID()) &&
-                    FactionEvents.recruitsFactionManager.getFactionByStringID(this.getTeam().getName()).getTeamLeaderUUID().equals(player.getUUID())){
-                Main.SIMPLE_CHANNEL.send(PacketDistributor.PLAYER.with(() -> (ServerPlayer) player), new MessageToClientOpenTakeOverScreen(this.getUUID()));
+                    TeamEvents.recruitsTeamManager.getTeamByStringID(this.getTeam().getName()).getTeamLeaderUUID().equals(player.getUUID())){
+                    //this will not work:
+                    Main.SIMPLE_CHANNEL.send(PacketDistributor.PLAYER.with(() -> (ServerPlayer) player), new MessageToClientOpenTakeOverScreen(this.getUUID()));
             }
-            else if (!this.isOwned() && !isPlayerTarget && this.canBeHired()) {
+            else if (!this.isOwned() && !isPlayerTarget) {
                 this.openHireGUI(player);
                 this.dialogue(name, player);
                 this.navigation.stop();
@@ -1290,12 +1385,7 @@ public abstract class AbstractRecruitEntity extends AbstractInventoryEntity{
         }
     }
 
-    public boolean hire(Player player, RecruitsGroup group, boolean message) {
-        if (!this.getCommandSenderWorld().isClientSide()) {
-            RecruitEvent.Hired hireEvent = new RecruitEvent.Hired(this, player);
-            MinecraftForge.EVENT_BUS.post(hireEvent);
-            if (hireEvent.isCanceled()) return false;
-        }
+    public boolean hire(Player player) {
         String name = this.getName().getString() + ": ";
         Team ownerTeam = player.getTeam();// player is the new owner
         String stringId = ownerTeam != null ? ownerTeam.getName() : "";
@@ -1313,39 +1403,26 @@ public abstract class AbstractRecruitEntity extends AbstractInventoryEntity{
             this.navigation.stop();
             this.setTarget(null);
             this.setFollowState(2);
-            this.setAggroState(0);
-            if(group != null) this.setGroupUUID(group.getUUID());
+            this.setState(0);
             this.despawnTimer = -1;
 
-            if(!this.getCommandSenderWorld().isClientSide()){
-                RecruitEvents.recruitsPlayerUnitManager.addRecruits(player.getUUID(), 1);
+            if(!this.getCommandSenderWorld().isClientSide() && ownerTeam != null) TeamEvents.addRecruitToTeam(this, ownerTeam, (ServerLevel) this.getCommandSenderWorld());
 
-                if(group != null){
-                    RecruitEvents.recruitsGroupsManager.addMember(group.getUUID(), this.getUUID(),  (ServerLevel) this.getCommandSenderWorld());
-                    RecruitEvents.recruitsGroupsManager.broadCastGroupsToPlayer(player);
+            int i = this.random.nextInt(4);
+            switch (i) {
+                default -> {
+                    player.sendSystemMessage(TEXT_RECRUITED1(name));
                 }
-
-                if(ownerTeam != null){
-                    FactionEvents.addRecruitToTeam(this, ownerTeam, (ServerLevel) this.getCommandSenderWorld());
+                case 2 -> {
+                    player.sendSystemMessage(TEXT_RECRUITED2(name));
                 }
-            }
-
-            if(message){
-                int i = this.random.nextInt(4);
-                switch (i) {
-                    default -> {
-                        player.sendSystemMessage(TEXT_RECRUITED1(name));
-                    }
-                    case 2 -> {
-                        player.sendSystemMessage(TEXT_RECRUITED2(name));
-                    }
-                    case 3 -> {
-                        player.sendSystemMessage(TEXT_RECRUITED3(name));
-                    }
+                case 3 -> {
+                    player.sendSystemMessage(TEXT_RECRUITED3(name));
                 }
             }
         }
 
+        RecruitEvents.recruitsPlayerUnitManager.addRecruits(player.getUUID(), 1);
         return true;
     }
 
@@ -1366,43 +1443,50 @@ public abstract class AbstractRecruitEntity extends AbstractInventoryEntity{
 
     ////////////////////////////////////ATTACK FUNCTIONS////////////////////////////////////
 
+	@Override
     public boolean hurt(@NotNull DamageSource dmg, float amt) {
-        if (this.isInvulnerableTo(dmg)) {
-            return false;
-        } else {
-            Entity entity = dmg.getEntity();
-            if (entity != null && !(entity instanceof Player) && !(entity instanceof AbstractArrow)) {
-                amt = (amt + 1.0F) / 2.0F;
-            }
-            if(this.getMorale() > 0) this.setMoral(this.getMorale() - 0.25F);
-            if(isBlocking()) hurtCurrentlyUsedShield(amt);
+        // [수정됨] 현재 처리 중인 데미지 소스 저장
+        this.handlingDamageSource = dmg;
 
-            if(entity instanceof LivingEntity living && RecruitEvents.canAttack(this, living)){
-                if(this.getFollowState() == 5){//Protecting
-                    List<AbstractRecruitEntity> list = this.getCommandSenderWorld().getEntitiesOfClass(AbstractRecruitEntity.class, this.getBoundingBox().inflate(32D));
-                    for(AbstractRecruitEntity recruit : list){
-                        if (recruit.getUUID().equals(recruit.getProtectUUID()) && recruit.isAlive() && !recruit.equals(living)){
-                            //Patrolleader
-                            recruit.setTarget(living);
+        try {
+            if (this.isInvulnerableTo(dmg)) {
+                return false;
+            } else {
+                Entity entity = dmg.getEntity();
+                if (entity != null && !(entity instanceof Player) && !(entity instanceof AbstractArrow)) {
+                    amt = (amt + 1.0F) / 2.0F;
+                }
+                if (this.getMorale() > 0) this.setMoral(this.getMorale() - 0.25F);
+                //if(isBlocking()) hurtCurrentlyUsedShield(amt); // 주석 처리된 기존 코드는 유지
+
+                if (entity instanceof LivingEntity living && RecruitEvents.canAttack(this, living)) {
+                    if (this.getFollowState() == 5) { //Protecting
+                        List<AbstractRecruitEntity> list = this.getCommandSenderWorld().getEntitiesOfClass(AbstractRecruitEntity.class, this.getBoundingBox().inflate(32D));
+                        for (AbstractRecruitEntity recruit : list) {
+                            if (recruit.getUUID().equals(recruit.getProtectUUID()) && recruit.isAlive() && !recruit.equals(living)) {
+                                //Patrolleader
+                                recruit.setTarget(living);
+                            }
                         }
                     }
+
+                    if (this.getTarget() != null) {
+                        double d1 = this.distanceToSqr(this.getTarget());
+                        double d2 = this.distanceToSqr(living);
+
+                        if (d2 < d1) this.setTarget(living);
+                    } else
+                        this.setTarget(living);
+
+                    if (this.getShouldProtect() && this.getProtectingMob() instanceof AbstractRecruitEntity patrolLeader) {
+                        patrolLeader.setTarget(living);
+                    }
                 }
-
-
-                if(this.getTarget() != null){
-                    double d1 = this.distanceToSqr(this.getTarget());
-                    double d2 = this.distanceToSqr(living);
-
-                    if(d2 < d1) this.setTarget(living);
-                }
-                else
-                    this.setTarget(living);
-
-                if(this.getShouldProtect() && this.getProtectingMob() instanceof AbstractRecruitEntity patrolLeader){
-                    patrolLeader.setTarget(living);
-                }
+                return super.hurt(dmg, amt);
             }
-            return super.hurt(dmg, amt);
+        } finally {
+            // [수정됨] 처리가 끝나면 반드시 null로 초기화하여 다른 로직에 영향이 없도록 함
+            this.handlingDamageSource = null;
         }
     }
 
@@ -1466,51 +1550,38 @@ public abstract class AbstractRecruitEntity extends AbstractInventoryEntity{
                 .add(Attributes.FOLLOW_RANGE, 32.0D);
     */
     /**
-     Important for mod compat: See smallships or siege weapons mod
-     **/
-    public boolean isAlliedTo(@Nullable Team team) {
-        if(team == null) return false;
-        Team recTeam = this.getTeam();
-        if(!this.getCommandSenderWorld().isClientSide() && recTeam != null){
-            RecruitsDiplomacyManager.DiplomacyStatus status = FactionEvents.recruitsDiplomacyManager.getRelation(recTeam.getName(), team.getName());
+        Important for mod compat: See smallships or siege weapons mod
+    **/
+    public boolean isAlliedTo(@NotNull Team team) {
+        if(!this.getCommandSenderWorld().isClientSide() && this.getTeam() != null){
+            RecruitsDiplomacyManager.DiplomacyStatus status = TeamEvents.recruitsDiplomacyManager.getRelation(this.getTeam().getName(), team.getName());
             return status == RecruitsDiplomacyManager.DiplomacyStatus.ALLY;
         }
         return super.isAlliedTo(team);
     }
 
     public void die(DamageSource dmg) {
-        Component deathMessage = this.getCombatTracker().getDeathMessage();
+        net.minecraft.network.chat.Component deathMessage = this.getCombatTracker().getDeathMessage();
         super.die(dmg);
         if (this.dead) {
-            if (this.getCommandSenderWorld().isClientSide()) return;
-
-            if (this.getCommandSenderWorld().getGameRules().getBoolean(GameRules.RULE_SHOWDEATHMESSAGES) && this.getOwner() instanceof ServerPlayer) {
-                this.getOwner().sendSystemMessage(deathMessage);
+            if (!this.getCommandSenderWorld().isClientSide()){
+                if (this.getCommandSenderWorld().getGameRules().getBoolean(GameRules.RULE_SHOWDEATHMESSAGES) && this.getOwner() instanceof ServerPlayer) {
+                    this.getOwner().sendSystemMessage(deathMessage);
+                }
+                if(this.isOwned()){
+                    RecruitEvents.recruitsPlayerUnitManager.removeRecruits(this.getOwnerUUID(), 1);
+                    TeamEvents.removeRecruitFromTeam(this, this.getTeam(), (ServerLevel) this.getCommandSenderWorld());
+                }
+                if(this.getTeam() != null){
+                    TeamEvents.recruitsTeamManager.getTeamByStringID(this.getTeam().getName()).addNPCs(-1);
+                }
             }
-
-            if(this.getTeam() != null){
-                RecruitsFaction faction = FactionEvents.recruitsFactionManager.getFactionByStringID(this.getTeam().getName());
-                if(faction != null) faction.addNPCs(-1);
-                FactionEvents.recruitsFactionManager.broadcastToFactionPlayers(this.getTeam().getName(), (ServerLevel) this.getCommandSenderWorld());
-            }
-
-            if(this.getGroup() != null){
-                RecruitEvents.recruitsGroupsManager.removeMember(this.getGroup(), this.getUUID(), (ServerLevel) this.getCommandSenderWorld());
-            }
-
-            if(this.isOwned()){
-                RecruitEvents.recruitsPlayerUnitManager.removeRecruits(this.getOwnerUUID(), 1);
-            }
-            FactionEvents.removeRecruitFromTeam(this, this.getTeam(), (ServerLevel) this.getCommandSenderWorld());
         }
     }
 
     ////////////////////////////////////OTHER FUNCTIONS////////////////////////////////////
 
     public void updateMorale(){
-        if(this instanceof VillagerNobleEntity){
-            return;
-        }
         //fast recovery
         float currentMorale = getMorale();
         float newMorale = currentMorale;
@@ -1561,45 +1632,118 @@ public abstract class AbstractRecruitEntity extends AbstractInventoryEntity{
         }
     }
 
-    public void updateHunger(){
-        if(this instanceof VillagerNobleEntity){
-            return;
-        }
+	public void updateHunger(){
+		// 1. 대기 상태(2)이거나, 움직임이 거의 없는 경우(멈춤) 허기 소모 없음
+		// (이 부분이 없으면 가만히 세워놔도 40분 뒤에 배고파서 비현실적임)
+		if (this.getFollowState() == 2 || this.getDeltaMovement().lengthSqr() < 0.0001) {
+			return; 
+		}
 
-        float hunger = getHunger();
+		float hunger = getHunger();
 
-        if (this.getFollowState() == 2) {
-            hunger -= 1/60F;
-        }
-        else{
-            hunger -= 2/60F;
-        }
+		// 2. 움직일 때 허기 감소 (0.04F = 1초당 0.04, 1분당 2.4 감소)
+		// -> 만복 기준 약 40분 활동 가능
+		hunger -= 0.005F;
 
-        if (hunger < 0) hunger = 0;
+		// 3. 하한선 제한
+		if (hunger < 0) hunger = 0;
 
-        this.setHunger(hunger);
+		this.setHunger(hunger);
+	}
 
-        if(RecruitsServerConfig.RecruitsStarving.get()){
-            if(hunger == 0){
-                this.hurt(this.damageSources().starve(), 0.25F);
+	// 1. 화살/탄약이 필요한지 체크하는 메서드 추가
+	public boolean needsAmmo() {
+		// 원거리 유닛이 아니면 false
+		if (!(this instanceof IRangedRecruit)) return false;
+		
+		// 머스킷 모드일 경우 탄약 체크
+		if (this instanceof CrossBowmanEntity && Main.isMusketModLoaded) {
+			return this.canTakeCartridge(); // 이미 구현된 메서드 활용 (32개 미만이면 true)
+		}
+		
+		// 일반 활/석궁일 경우 화살 체크
+		return this.canTakeArrows(); // 이미 구현된 메서드 활용 (32개 미만이면 true)
+	}
+
+	public boolean needsToGetFood() {
+			int timer = this.getUpkeepTimer();
+			
+			boolean hasFood = this.hasFoodInInv();
+			boolean needsToEat = this.needsToEat();
+			
+			// 밥 없고 배고픔
+			boolean conditionFood = !hasFood && needsToEat;
+			// 탄약/수류탄 부족함
+			boolean conditionSupply = this.needsAmmoOrGrenades();
+
+			boolean isChest = this.getUpkeepPos() != null;
+			boolean isEntity = this.getUpkeepUUID() != null;
+
+			// 타이머가 0일 때만 작동하도록 강제 (무한 루프 방지)
+			return (timer == 0 && (forcedUpkeep || conditionFood || conditionSupply) 
+				   && (isChest || isEntity)) 
+				   && !getShouldProtect();
+	}
+// [신규] 유탄발사기(jeg:grenade_launcher)를 주무기에 들고 있는지 확인
+    public boolean isHoldingGrenadeLauncher() {
+        if (this.getMainHandItem().isEmpty()) return false;
+        ResourceLocation id = ForgeRegistries.ITEMS.getKey(this.getMainHandItem().getItem());
+        return id != null && id.toString().equals("jeg:grenade_launcher");
+    }
+
+    // [신규] 인벤토리에 수류탄(jeg:grenade)이 64개 미만인지 확인
+	public boolean canTakeGrenades() {
+			int count = 0;
+			for(ItemStack stack : this.inventory.items) {
+				// 빈 아이템은 건너뛰기
+				if (stack.isEmpty()) continue;
+				
+				ResourceLocation id = ForgeRegistries.ITEMS.getKey(stack.getItem());
+				// ID가 null이 아니고 "jeg:grenade"와 정확히 일치하면 카운트
+				if(id != null && id.toString().equals("jeg:grenade")) {
+					count += stack.getCount();
+				}
+			}
+			// 192개 있으면 당연히 false 반환
+			return count < 64;
+	}
+
+// [수정됨] 탄약/화살/수류탄 등 보급이 필요한지 통합 체크
+    public boolean needsAmmoOrGrenades() {
+        // 1. 기존 원거리 유닛 화살/탄약 체크 (활, 석궁, 머스킷 등)
+        if (this instanceof IRangedRecruit) {
+            if (this instanceof CrossBowmanEntity && Main.isMusketModLoaded) {
+                if (this.canTakeCartridge()) return true;
+            } else {
+                if (this.canTakeArrows()) return true;
             }
         }
+        
+        // 2. 유탄발사기 들고 있으면 수류탄 체크
+        if (this.isHoldingGrenadeLauncher()) {
+            if (this.canTakeGrenades()) return true;
+        }
+
+        // 3. [핵심 추가] JEG 총기를 들고 있을 때 탄약 체크
+        // 이 부분이 없어서 총알이 없어도 보급하러 가지 않았던 것입니다.
+        ItemStack mainHand = this.getMainHandItem();
+        if (mainHand.getItem() instanceof ttv.migami.jeg.item.GunItem) {
+             ttv.migami.jeg.common.Gun gun = ((ttv.migami.jeg.item.GunItem) mainHand.getItem()).getGun();
+             if (gun != null && gun.getProjectile() != null) {
+                 net.minecraft.resources.ResourceLocation ammoId = gun.getProjectile().getItem();
+                 // 탄약(박스 포함)이 128발 미만이면 true 반환 -> 보급 출발
+                 if (this.canTakeGunAmmo(ammoId)) return true;
+             }
+        }
+        
+        return false;
     }
 
-    public boolean needsToGetFood(){
-        int timer = this.getUpkeepTimer();
-        boolean needsToEat = this.needsToEat();
-        boolean hasFood = this.hasFoodInInv();
-        boolean isChest = this.getUpkeepPos() != null;
-        boolean isEntity = this.getUpkeepUUID() != null;
-
-        return (forcedUpkeep || (!hasFood && timer == 0 && needsToEat) && (isChest || isEntity)) && !getShouldProtect();
-    }
-
-    public boolean hasFoodInInv(){
+	public boolean hasFoodInInv(){
         return this.getInventory().items
                 .stream()
-                .anyMatch(ItemStack::isEdible);
+                // [수정] 내 인벤토리 검사 시에도 canEatItemStack 로직을 사용하여 수통을 식량으로 인식하게 함
+                .anyMatch(this::canEatItemStack); 
     }
 
     public boolean needsToEat(){
@@ -1615,7 +1759,7 @@ public abstract class AbstractRecruitEntity extends AbstractInventoryEntity{
     public boolean needsToPotion(){
         LivingEntity target = this.getTarget();
         if(target != null){
-            return getHealth() <= (getMaxHealth() * 0.60) || target.getHealth() > this.getHealth();
+            return getHealth() <= (getMaxHealth() * 0.60);
         }
         return false;
     }
@@ -1638,9 +1782,6 @@ public abstract class AbstractRecruitEntity extends AbstractInventoryEntity{
 
             if(this.getMorale() < 100)
                 this.setMoral(getMorale() + 5F);
-            if (!this.getCommandSenderWorld().isClientSide()) {
-                MinecraftForge.EVENT_BUS.post(new RecruitEvent.LevelUp(this, this.getXpLevel()));
-            }
         }
     }
 
@@ -1684,15 +1825,15 @@ public abstract class AbstractRecruitEntity extends AbstractInventoryEntity{
     }
 
     protected void hurtArmor(@NotNull DamageSource damageSource, float damage) {
-        if(this.level().isClientSide()) return;
-
         ItemStack headArmor = this.getItemBySlot(EquipmentSlot.HEAD);
         boolean hasHeadArmor = !headArmor.isEmpty();
+        //Main.LOGGER.debug("headArmor :" + headArmor);
+        //Main.LOGGER.debug("hasHeadArmor: " + hasHeadArmor);
 
         if (((!(damageSource.is(DamageTypes.IN_FIRE) && (damageSource.is(DamageTypes.ON_FIRE))) || !headArmor.getItem().isFireResistant()) && headArmor.getItem() instanceof ArmorItem)){
-            //damage
-            headArmor.hurtAndBreak(1, this, (recruit) -> {
-                recruit.broadcastBreakEvent(EquipmentSlot.HEAD);
+        //damage
+            headArmor.hurtAndBreak(1, this, (p_43296_) -> {
+                //p_43296_.broadcastBreakEvent(EquipmentSlot.HEAD);
             });
         }
 
@@ -1707,8 +1848,8 @@ public abstract class AbstractRecruitEntity extends AbstractInventoryEntity{
         boolean hasChestArmor = !chestArmor.isEmpty();
         if (((!(damageSource.is(DamageTypes.IN_FIRE) && (damageSource.is(DamageTypes.ON_FIRE))) || !chestArmor.getItem().isFireResistant()) && chestArmor.getItem() instanceof ArmorItem)){
             //damage
-            chestArmor.hurtAndBreak(1, this, (recruit) -> {
-                recruit.broadcastBreakEvent(EquipmentSlot.CHEST);
+            chestArmor.hurtAndBreak(1, this, (p_43296_) -> {
+
             });
         }
         if (this.getItemBySlot(EquipmentSlot.CHEST).isEmpty() && hasChestArmor) {
@@ -1723,8 +1864,8 @@ public abstract class AbstractRecruitEntity extends AbstractInventoryEntity{
 
         if (((!(damageSource.is(DamageTypes.IN_FIRE) && (damageSource.is(DamageTypes.ON_FIRE))) || !legsArmor.getItem().isFireResistant()) && legsArmor.getItem() instanceof ArmorItem)){
             //damage
-            legsArmor.hurtAndBreak(1, this, (recruit) -> {
-                recruit.broadcastBreakEvent(EquipmentSlot.LEGS);
+            legsArmor.hurtAndBreak(1, this, (p_43296_) -> {
+
             });
         }
         if (this.getItemBySlot(EquipmentSlot.LEGS).isEmpty() && hasLegsArmor) {
@@ -1751,16 +1892,21 @@ public abstract class AbstractRecruitEntity extends AbstractInventoryEntity{
             this.playSound(SoundEvents.ITEM_BREAK, 0.8F, 0.8F + this.getCommandSenderWorld().random.nextFloat() * 0.4F);
             this.tryToReequip(EquipmentSlot.FEET);
         }
+
     }
 
     public void damageMainHandItem() {
-        if(this.level().isClientSide()) return;
-
+        //dont know why the fuck i cant assign this mainhand slot to inventory slot 4
+        //therefor i need to make this twice
         ItemStack handItem = this.getItemBySlot(EquipmentSlot.MAINHAND);
         boolean hasHandItem = !handItem.isEmpty();
-
-        this.getMainHandItem().hurtAndBreak(1, this, (recruit) -> {
-            recruit.broadcastBreakEvent(EquipmentSlot.MAINHAND);
+        /*//Fixes damage duplication
+        this.getMainHandItem().hurtAndBreak(1, this, (p_43296_) -> {
+            p_43296_.broadcastBreakEvent(EquipmentSlot.MAINHAND);
+        });
+         */
+        this.inventory.getItem(5).hurtAndBreak(1, this, (p_43296_) -> {
+            p_43296_.broadcastBreakEvent(EquipmentSlot.MAINHAND);
         });
 
         if (this.getMainHandItem().isEmpty() && hasHandItem) {
@@ -1796,22 +1942,6 @@ public abstract class AbstractRecruitEntity extends AbstractInventoryEntity{
 
                 itemStack.shrink(1);
             }
-        }
-    }
-
-    @Override
-    protected void hurtCurrentlyUsedShield(float damage) {
-        if(this.level().isClientSide()) return;
-
-        this.getOffhandItem().hurtAndBreak(1, this, (recruit) -> {
-            recruit.broadcastBreakEvent(EquipmentSlot.OFFHAND);
-        });
-
-        if (this.getOffhandItem().isEmpty()) {
-            this.inventory.setItem(4, ItemStack.EMPTY);
-            this.getInventory().setChanged();
-            this.playSound(SoundEvents.SHIELD_BREAK, 0.8F, 0.8F + this.getCommandSenderWorld().random.nextFloat() * 0.4F);
-            this.tryToReequipShield();
         }
     }
 
@@ -1867,9 +1997,9 @@ public abstract class AbstractRecruitEntity extends AbstractInventoryEntity{
     }
 
     public void disableShield() {
-        this.blockCoolDown = this.getBlockCoolDown();
-        this.stopUsingItem();
-        this.getCommandSenderWorld().broadcastEntityEvent(this, (byte) 30);
+            this.blockCoolDown = this.getBlockCoolDown();
+            this.stopUsingItem();
+            this.getCommandSenderWorld().broadcastEntityEvent(this, (byte) 30);
     }
 
     public boolean canBlock(){
@@ -1886,9 +2016,80 @@ public abstract class AbstractRecruitEntity extends AbstractInventoryEntity{
         return this.mountTimer;
     }
 
+	@Override
+	protected void hurtCurrentlyUsedShield(float damage) {
+		ItemStack shieldStack = this.getOffhandItem();
+		if (shieldStack.isEmpty()) return;
+
+		boolean handledBySpartan = false;
+
+		// 1. Spartan Shields (에너지 방패) 처리 - 하드 디펜던시(컴파일 에러) 제거 버전
+		// 클래스 직접 참조 대신 NBT("Energy")의 존재 여부로 확인합니다.
+		if (shieldStack.hasTag() && shieldStack.getTag().contains("Energy")) {
+			
+			// 스파르탄 쉴드의 기본 에너지 소모 배율
+			int multiplier = 100;
+			
+			// 리플렉션을 통해 Config 값 가져오기 시도 (실패 시 기본값 100으로 안전하게 작동)
+			if (net.minecraftforge.fml.ModList.get().isLoaded("spartanshields")) {
+				try {
+					Class<?> configClass = Class.forName("com.oblivioussp.spartanshields.config.Config");
+					Object instanceObj = configClass.getField("INSTANCE").get(null);
+					Object configValueObj = instanceObj.getClass().getField("damageToFEMultiplier").get(instanceObj);
+					multiplier = (Integer) configValueObj.getClass().getMethod("get").invoke(configValueObj);
+				} catch (Exception ignored) { }
+			}
+
+			// [폭발 시 에너지 소모 10배] (기존에 주석은 10배였으나 코드는 5배로 되어있던 오류 수정)
+			if (this.handlingDamageSource != null && this.handlingDamageSource.is(net.minecraft.tags.DamageTypeTags.IS_EXPLOSION)) {
+				multiplier *= 10;
+			}
+
+			int energyToUse = Math.round(damage * multiplier);
+			int currentEnergy = shieldStack.getTag().getInt("Energy");
+			int newEnergy = Math.max(0, currentEnergy - energyToUse);
+			
+			// NBT 데이터 직접 갱신
+			shieldStack.getTag().putInt("Energy", newEnergy);
+
+			// 에너지가 0이 되었을 때 방어 해제 및 사운드 출력
+			if (newEnergy <= 0 && currentEnergy > 0) {
+				this.level().playSound(null, this.getX(), this.getY(), this.getZ(), 
+					net.minecraft.sounds.SoundEvents.SHIELD_BREAK, this.getSoundSource(), 0.8F, 0.8F + this.level().random.nextFloat() * 0.4F);
+				this.stopUsingItem(); 
+			}
+			handledBySpartan = true;
+		} 
+		
+		// 2. 일반 방패 처리 (내구도 감소)
+		if (!handledBySpartan) {
+			float damageRatio = 0.75F;
+			// [폭발 시 내구도 소모 5배]
+			if (this.handlingDamageSource != null && this.handlingDamageSource.is(net.minecraft.tags.DamageTypeTags.IS_EXPLOSION)) {
+				damageRatio = 5.0F; 
+			}
+			int damageToApply = Math.max(1, Math.round((1.0F + damage) * damageRatio));
+			
+			// 내구도 깎기 (내구도 0 되면 아이템 파괴 이벤트 발생)
+			shieldStack.hurtAndBreak(damageToApply, this, (p) -> p.broadcastBreakEvent(net.minecraft.world.entity.EquipmentSlot.OFFHAND));
+			
+			// [★핵심 수정] 동기화 오류 해결: 방패가 실제로 파괴되었는지 확실하게 동기화
+			if (shieldStack.isEmpty()) {
+				// 1. 서버 슬롯 명시적 비우기
+				this.setItemSlot(net.minecraft.world.entity.EquipmentSlot.OFFHAND, ItemStack.EMPTY);
+				// 2. 방어 모션 강제 해제
+				this.stopUsingItem();
+				// 3. 파괴 사운드 보장
+				this.level().playSound(null, this.getX(), this.getY(), this.getZ(), 
+					net.minecraft.sounds.SoundEvents.SHIELD_BREAK, this.getSoundSource(), 0.8F, 0.8F + this.level().random.nextFloat() * 0.4F);
+			}
+		}
+	}
+
     @Override
     public void openGUI(Player player) {
         if (player instanceof ServerPlayer) {
+            CommandEvents.updateRecruitInventoryScreen((ServerPlayer) player);
             NetworkHooks.openScreen((ServerPlayer) player, new MenuProvider() {
                 @Override
                 public @NotNull Component getDisplayName() {
@@ -1926,40 +2127,63 @@ public abstract class AbstractRecruitEntity extends AbstractInventoryEntity{
     public static void openTakeOverGUI(Player player) {
 
     }
-    public boolean canBeHired(){
-        return true;
-    }
+
     @Override
     public boolean canAttack(@Nonnull LivingEntity target) {
-        if(target instanceof MessengerEntity messenger && messenger.isAtMission()) return false;
-        if(RecruitsServerConfig.TargetBlackList.get().contains(target.getEncodeId())) return false;
         return RecruitEvents.canAttack(this, target);
     }
     // 0 = NEUTRAL
     // 1 = AGGRESSIVE
     // 2 = RAID
     // 3 = PASSIVE
-    public boolean shouldAttack(LivingEntity target) {
-        return switch (this.getState()) {
-            case 3 -> false; // Passive mode: never attack
-            case 0 -> shouldAttackOnNeutral(target) && canAttack(target);
-            case 1 -> (shouldAttackOnNeutral(target) || shouldAttackOnAggressive(target)) && canAttack(target);
-            case 2 -> !RecruitEvents.isAlly(this.getTeam(), target.getTeam()) && canAttack(target);
-            default -> canAttack(target);
-        };
-    }
+	public boolean shouldAttack(LivingEntity target) {
+		// 1. 기존 블랙리스트 체크
+		if(RecruitsServerConfig.TargetBlackList.get().contains(target.getEncodeId())) return false;
+		if(RecruitsServerConfig.TargetWhiteList.get().contains(target.getEncodeId())) return true;
+		if(target instanceof MessengerEntity messenger && messenger.isAtMission()) return false;
+
+		// 2. 안전 장치 (자기 자신, 주인, 같은 팀 보호)
+		if (target == this) return false;
+		if (this.isOwned() && target.getUUID().equals(this.getOwnerUUID())) return false;
+		
+		if (target instanceof AbstractRecruitEntity recruitTarget) {
+			 if (this.isOwned() && recruitTarget.isOwned() && this.getOwnerUUID().equals(recruitTarget.getOwnerUUID())) return false;
+		}
+
+		if (this.getTeam() != null && target.getTeam() != null) {
+			if (this.getTeam().isAlliedTo(target.getTeam())) return false;
+			if (this.getTeam().getName().equals(target.getTeam().getName())) return false;
+		}
+
+		// =========================================================
+		// [수정된 위치] ONLY P 로직은 반드시 switch문(최종 리턴)보다 위에 있어야 합니다.
+		// =========================================================
+		if (this.isOnlyPvP()) {
+			boolean isPlayer = target instanceof Player;
+			boolean isRecruit = target instanceof AbstractRecruitEntity;
+			
+			// 대상이 플레이어도 아니고 리크루트도 아니라면(몬스터라면) 공격 금지
+			if (!isPlayer && !isRecruit) {
+				return false;
+			}
+		}
+		// =========================================================
+
+		// 3. 최종 상태 판단 (기존 로직)
+		return switch (this.getState()) {
+			case 3 -> false; // PASSIVE
+			case 0 -> shouldAttackOnNeutral(target) && canAttack(target);
+			case 1 -> (shouldAttackOnNeutral(target) || shouldAttackOnAggressive(target)) && canAttack(target); // AGGRESSIVE
+			case 2 -> !RecruitEvents.isAlly(this.getTeam(), target.getTeam()) && canAttack(target); // RAID
+			default -> canAttack(target);
+		};
+	}
 
     private boolean shouldAttackOnNeutral(LivingEntity target){
-        if(isMonster(target) || isAttackingOwnerOrSelf(this, target)) return true;
-
-        if(target instanceof Villager) return false;
-
-        return RecruitEvents.isEnemy(this.getTeam(), target.getTeam());
+        return isMonster(target) || isAttackingOwnerOrSelf(this, target) || RecruitEvents.isEnemy(this.getTeam(), target.getTeam());
     }
 
     private boolean shouldAttackOnAggressive(LivingEntity target){
-        if(target instanceof Villager) return false;
-
         return (target instanceof AbstractRecruitEntity || target instanceof Player) && (RecruitEvents.isNeutral(this.getTeam(), target.getTeam()) || RecruitEvents.isEnemy(this.getTeam(), target.getTeam()));
     }
 
@@ -1988,6 +2212,16 @@ public abstract class AbstractRecruitEntity extends AbstractInventoryEntity{
      * - If recruit team is != null but owner team is null
      *********************************************************/
     public void updateTeam(){
+// [추가된 부분] 그룹 99번(Black Ops)이면 팀 업데이트 차단
+		if (this.getGroup() == 999999) {
+			// 만약 어떤 이유로 팀 정보가 남아있다면 제거
+			if (this.getTeam() != null && !this.getCommandSenderWorld().isClientSide()) {
+				TeamEvents.removeRecruitFromTeam(this, this.getTeam(), (ServerLevel) this.getCommandSenderWorld());
+			}
+			this.needsTeamUpdate = false;
+			return; 
+		}
+		// [추가된 부분 끝]
         if(this.isOwned() && !this.getCommandSenderWorld().isClientSide()){
             Player owner = getOwner();
             if(owner != null) {
@@ -1997,15 +2231,15 @@ public abstract class AbstractRecruitEntity extends AbstractInventoryEntity{
                 if (ownerTeam == null) {
                     if(recruitTeam != null){
                         //Remove from current team because ownerTeam is null
-                        FactionEvents.removeRecruitFromTeam(this, recruitTeam, (ServerLevel) this.getCommandSenderWorld());
-                        FactionEvents.addNPCToData((ServerLevel) this.getCommandSenderWorld(), recruitTeam.getName(), -1 );
+                        TeamEvents.removeRecruitFromTeam(this, recruitTeam, (ServerLevel) this.getCommandSenderWorld());
+                        TeamEvents.addNPCToData((ServerLevel) this.getCommandSenderWorld(), recruitTeam.getName(), -1 );
                     }
                     //recruit team is also null, so no do nothing
                     needsTeamUpdate = false;
                 }
                 else if(recruitTeam == null){
-                    FactionEvents.addRecruitToTeam(this, ownerTeam, (ServerLevel) this.getCommandSenderWorld());
-                    FactionEvents.addNPCToData((ServerLevel) this.getCommandSenderWorld(), ownerTeam.getName(), +1 );
+                    TeamEvents.addRecruitToTeam(this, ownerTeam, (ServerLevel) this.getCommandSenderWorld());
+                    TeamEvents.addNPCToData((ServerLevel) this.getCommandSenderWorld(), ownerTeam.getName(), +1 );
                     needsTeamUpdate = false;
                 }
                 else if(recruitTeam == ownerTeam){
@@ -2013,11 +2247,11 @@ public abstract class AbstractRecruitEntity extends AbstractInventoryEntity{
                     needsTeamUpdate = false;
                 }
                 else{
-                    FactionEvents.removeRecruitFromTeam(this, recruitTeam, (ServerLevel) this.getCommandSenderWorld());
-                    FactionEvents.addNPCToData((ServerLevel) this.getCommandSenderWorld(), recruitTeam.getName(), -1 );
+                    TeamEvents.removeRecruitFromTeam(this, recruitTeam, (ServerLevel) this.getCommandSenderWorld());
+                    TeamEvents.addNPCToData((ServerLevel) this.getCommandSenderWorld(), recruitTeam.getName(), -1 );
 
-                    FactionEvents.addRecruitToTeam(this, ownerTeam, (ServerLevel) this.getCommandSenderWorld());
-                    FactionEvents.addNPCToData((ServerLevel) this.getCommandSenderWorld(), ownerTeam.getName(), +1 );
+                    TeamEvents.addRecruitToTeam(this, ownerTeam, (ServerLevel) this.getCommandSenderWorld());
+                    TeamEvents.addNPCToData((ServerLevel) this.getCommandSenderWorld(), ownerTeam.getName(), +1 );
                     needsTeamUpdate = false;
                 }
             }
@@ -2026,53 +2260,13 @@ public abstract class AbstractRecruitEntity extends AbstractInventoryEntity{
 
     private void updateColor(String name) {
         if(!this.getCommandSenderWorld().isClientSide()){
-            RecruitsFaction recruitsFaction = FactionEvents.recruitsFactionManager.getFactionByStringID(name);
-            if(recruitsFaction != null && recruitsFaction.getUnitColor() != this.getColor()){
-                this.setColor(recruitsFaction.getUnitColor());
+            RecruitsTeam recruitsTeam = TeamEvents.recruitsTeamManager.getTeamByStringID(name);
+            if(recruitsTeam != null && recruitsTeam.getUnitColor() != this.getColor()){
+                this.setColor(recruitsTeam.getUnitColor());
                 this.needsColorUpdate = false;
             }
         }
     }
-
-    public void updateGroup() {
-        if (this.getCommandSenderWorld().isClientSide()) return;
-
-        this.needsGroupUpdate = false;
-        if (this.getGroup() == null) return;
-
-        UUID raw = this.getGroup();
-        UUID resolved = RecruitEvents.recruitsGroupsManager.resolveGroup(raw);
-        UUID finalGroup = RecruitEvents.recruitsGroupsManager.resolveRecruit(this.getUUID(), resolved);
-
-        if (!finalGroup.equals(raw)) {
-            this.setGroupUUID(finalGroup);
-        }
-
-        RecruitsGroup group = RecruitEvents.recruitsGroupsManager.getGroup(finalGroup);
-
-        if (group == null) {
-            this.setGroupUUID(null);
-            return;
-        }
-
-        if (!group.members.contains(this.getUUID())) {
-            this.setGroupUUID(null);
-            return;
-        }
-
-        if (group.disbandContext != null && group.disbandContext.disband) {
-            this.disband(null, group.disbandContext.keepTeam, group.disbandContext.increaseCost);
-            this.needsTeamUpdate = true;
-            return;
-        }
-
-        if (this.isOwned() && !this.getOwnerUUID().equals(group.getPlayerUUID())) {
-            this.assignToPlayer(group.getPlayerUUID(), group.getUUID());
-        }
-
-        this.needsTeamUpdate = true;
-    }
-
 
     public void openHireGUI(Player player) {
         if (player instanceof ServerPlayer) {
@@ -2080,7 +2274,7 @@ public abstract class AbstractRecruitEntity extends AbstractInventoryEntity{
             Team ownerTeam = player.getTeam();
             String stringId = ownerTeam != null ? ownerTeam.getName() : "";
             boolean canHire = RecruitEvents.recruitsPlayerUnitManager.canPlayerRecruit(stringId, player.getUUID());
-            Main.SIMPLE_CHANNEL.send(PacketDistributor.PLAYER.with(()-> (ServerPlayer) player), new MessageToClientUpdateHireState(canHire));
+            Main.SIMPLE_CHANNEL.send(PacketDistributor.PLAYER.with(()-> (ServerPlayer) player), new MessageToClientUpdateHireScreen(TeamEvents.getCurrency(), canHire));
             NetworkHooks.openScreen((ServerPlayer) player, new MenuProvider() {
                 @Override
                 public @NotNull Component getDisplayName() {
@@ -2094,25 +2288,6 @@ public abstract class AbstractRecruitEntity extends AbstractInventoryEntity{
             }, packetBuffer -> {packetBuffer.writeUUID(getUUID());});
         } else {
             Main.SIMPLE_CHANNEL.sendToServer(new MessageHireGui(player, this.getUUID()));
-        }
-    }
-
-    public void assignToPlayer(UUID newOwner, UUID newGroupUUID){
-        RecruitsGroup currentGroup = RecruitEvents.recruitsGroupsManager.getGroup(this.getGroup());
-        if(currentGroup != null){
-            currentGroup.removeMember(this.getUUID());
-        }
-
-        this.setGroupUUID(newGroupUUID);
-        RecruitsGroup newGroup = RecruitEvents.recruitsGroupsManager.getGroup(newGroupUUID);
-
-        this.disband(null, false, false);
-
-        this.setOwnerUUID(Optional.of(newOwner));
-
-        if(getOwner() != null){
-            this.hire(getOwner(), newGroup, true);
-            this.setFollowState(1);
         }
     }
 
@@ -2146,11 +2321,127 @@ public abstract class AbstractRecruitEntity extends AbstractInventoryEntity{
         return this.getUpkeepPos() != null || this.getUpkeepUUID() != null;
     }
 
-    public void upkeepReequip(@NotNull Container container) {
-        //Try to reequip
+// [수정됨] 인벤토리 + 탄약 박스 내부까지 모두 뒤져서 총알 갯수를 파악하는 메서드
+    public boolean canTakeGunAmmo(ResourceLocation ammoId) {
+        if (ammoId == null) return false;
+
+        int totalCount = 0;
+
+        // 용병 인벤토리 전체 순회
+        for(int i = 0; i < this.inventory.getContainerSize(); i++) {
+            ItemStack stack = this.inventory.getItem(i);
+            if (stack.isEmpty()) continue;
+
+            ResourceLocation itemId = net.minecraftforge.registries.ForgeRegistries.ITEMS.getKey(stack.getItem());
+            if (itemId == null) continue;
+
+            // 1. 낱개 탄약 카운트
+            if (itemId.equals(ammoId)) {
+                totalCount += stack.getCount();
+            }
+            
+            // 2. 탄약 박스(jeg:ammo_box) 내부 카운트
+            else if (itemId.toString().equals("jeg:ammo_box")) {
+                CompoundTag rootTag = stack.getTag();
+                // NBT 데이터가 있는 경우만 검사
+                if (rootTag != null && rootTag.contains("BlockEntityTag", 10)) {
+                    CompoundTag blockEntityTag = rootTag.getCompound("BlockEntityTag");
+                    if (blockEntityTag.contains("Items", 9)) {
+                        // 탄약 박스 내부 아이템 목록 로드 (크기 15)
+                        net.minecraft.core.NonNullList<ItemStack> boxContents = 
+                            net.minecraft.core.NonNullList.withSize(15, ItemStack.EMPTY);
+                        
+                        net.minecraft.world.ContainerHelper.loadAllItems(blockEntityTag, boxContents);
+
+                        // 박스 내부 아이템 순회
+                        for (ItemStack innerStack : boxContents) {
+                            if (!innerStack.isEmpty()) {
+                                ResourceLocation innerId = net.minecraftforge.registries.ForgeRegistries.ITEMS.getKey(innerStack.getItem());
+                                if (innerId != null && innerId.equals(ammoId)) {
+                                    totalCount += innerStack.getCount();
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 합산된 총알이 128발(2세트) 미만일 때만 true 반환
+        return totalCount < 128;
+    }
+
+	public void upkeepReequip(@NotNull Container container) {
+        // 0. [신규] 빈 탄약 박스 반납 시도 (인벤토리 공간 확보)
+        this.returnEmptyAmmoBoxes(container);
+
+        // 1. 현재 주무기가 JEG 총기인지 확인하고, 필요한 탄약 ID 파악
+        ResourceLocation gunAmmoId = null;
+        ItemStack mainHand = this.getMainHandItem();
+
+        // JEG 총기인지 확인
+        if (mainHand.getItem() instanceof ttv.migami.jeg.item.GunItem) {
+            ttv.migami.jeg.common.Gun gun = ((ttv.migami.jeg.item.GunItem) mainHand.getItem()).getGun();
+            if (gun != null && gun.getProjectile() != null) {
+                gunAmmoId = gun.getProjectile().getItem();
+            }
+        }
+
+        boolean tookAmmoBox = false; // 이번 틱에 탄약 박스를 가져갔는지 체크
+
+        // 2. 보급 상자 스캔
         for(int i = 0; i < container.getContainerSize(); i++) {
             ItemStack itemstack = container.getItem(i);
+            
+            if (itemstack.isEmpty()) continue;
+
+            ResourceLocation regId = net.minecraftforge.registries.ForgeRegistries.ITEMS.getKey(itemstack.getItem());
+            if (regId == null) continue;
+            String itemId = regId.toString();
+            
             ItemStack equipment;
+
+            // --- [JEG 총기 탄약 보급 로직] ---
+            if (gunAmmoId != null) {
+                
+                // Case A: [우선순위 1] '탄약 박스(jeg:ammo_box)'인 경우
+                // 이미 박스를 하나 챙겼다면(tookAmmoBox) 더 가져가지 않음 (1개만)
+                if (!tookAmmoBox && itemId.equals("jeg:ammo_box")) {
+                    // 탄약이 부족하고 + 박스 안에 내 총알이 128발 이상 들어있으면
+                    if (this.canTakeGunAmmo(gunAmmoId) && getAmmoCountInBox(itemstack, gunAmmoId) >= 128) {
+                        
+                        // 박스를 통째로 복사해서 내 인벤토리에 넣음
+                        equipment = itemstack.copy();
+                        equipment.setCount(1); // 박스는 1개만
+                        
+                        // [수정됨] addItem()은 남은 아이템(ItemStack)을 반환하므로, isEmpty()로 성공 여부 확인
+                        if (this.inventory.addItem(equipment).isEmpty()) {
+                            itemstack.shrink(1); // 보급 상자에서 박스 1개 제거 (실제 이동)
+                            tookAmmoBox = true;  // 박스 챙김 표시
+                            continue; // 다음 아이템으로
+                        }
+                    }
+                }
+                
+                // Case B: [우선순위 2] '낱개 탄약'인 경우
+                // 박스를 못 찾았거나 못 가져갔을 때만 낱개를 챙김
+                else if (regId.equals(gunAmmoId)) {
+                    if (this.canTakeGunAmmo(gunAmmoId)) {
+                        equipment = itemstack.copy();
+                        int countBefore = equipment.getCount();
+                        
+                        this.inventory.addItem(equipment); 
+                        
+                        // 실제로 들어간 갯수만큼 상자에서 차감
+                        int amountTaken = countBefore - equipment.getCount();
+                        itemstack.shrink(amountTaken); 
+                        
+                        if (itemstack.isEmpty()) continue;
+                    }
+                }
+            }
+
+            // --- [기존 장비 및 기타 모드 아이템 보급 로직] ---
             if(!this.canEatItemStack(itemstack) && this.wantsToPickUp(itemstack)){
                 if (this.canEquipItem(itemstack)) {
                     equipment = itemstack.copy();
@@ -2158,6 +2449,7 @@ public abstract class AbstractRecruitEntity extends AbstractInventoryEntity{
                     this.equipItem(equipment);
                     itemstack.shrink(1);
                 }
+                
                 if(this instanceof CrossBowmanEntity crossBowmanEntity && Main.isMusketModLoaded && IWeapon.isMusketModWeapon(crossBowmanEntity.getMainHandItem()) && itemstack.getDescriptionId().contains("cartridge")){
                     if(this.canTakeCartridge()){
                         equipment = itemstack.copy();
@@ -2165,7 +2457,7 @@ public abstract class AbstractRecruitEntity extends AbstractInventoryEntity{
                         itemstack.shrink(equipment.getCount());
                     }
                 }
-                else if (this instanceof IRangedRecruit && itemstack.is(ItemTags.ARROWS)){ //all that are ranged
+                else if (this instanceof IRangedRecruit && itemstack.is(ItemTags.ARROWS)){ 
                     if(this.canTakeArrows()){
                         equipment = itemstack.copy();
                         this.inventory.addItem(equipment);
@@ -2173,7 +2465,15 @@ public abstract class AbstractRecruitEntity extends AbstractInventoryEntity{
                     }
                 }
             }
-
+            
+            // 수류탄 및 선장 유닛 로직
+            if (this.isHoldingGrenadeLauncher() && itemId.equals("jeg:grenade")) {
+                if (this.canTakeGrenades()) {
+                    equipment = itemstack.copy();
+                    this.inventory.addItem(equipment); 
+                    itemstack.shrink(equipment.getCount());
+                }
+            }
             if (this instanceof CaptainEntity && Main.isSmallShipsLoaded){
                 if(itemstack.getDescriptionId().contains("cannon_ball")){
                     if(this.canTakeCannonBalls()){
@@ -2199,19 +2499,68 @@ public abstract class AbstractRecruitEntity extends AbstractInventoryEntity{
             }
         }
     }
+// [신규] 탄약 박스 아이템(Stack) 안에 특정 탄약이 몇 발 들었는지 확인
+    private int getAmmoCountInBox(ItemStack boxStack, ResourceLocation targetAmmoId) {
+        int total = 0;
+        CompoundTag rootTag = boxStack.getTag();
+        if (rootTag != null && rootTag.contains("BlockEntityTag", 10)) {
+            CompoundTag blockEntityTag = rootTag.getCompound("BlockEntityTag");
+            if (blockEntityTag.contains("Items", 9)) {
+                net.minecraft.core.NonNullList<ItemStack> contents = 
+                    net.minecraft.core.NonNullList.withSize(15, ItemStack.EMPTY);
+                net.minecraft.world.ContainerHelper.loadAllItems(blockEntityTag, contents);
 
-    public boolean canMountEntity(Entity mount) {
-        return mount instanceof AbstractHorse ||
-                RecruitsServerConfig.MountWhiteList.get().contains(mount.getEncodeId()) ||
-                this instanceof SiegeEngineerEntity && SiegeWeapon.isSiegeWeapon(mount)||
-                this instanceof CaptainEntity && SmallShips.isSmallShip(mount);
+                for (ItemStack s : contents) {
+                    if (!s.isEmpty()) {
+                        ResourceLocation id = net.minecraftforge.registries.ForgeRegistries.ITEMS.getKey(s.getItem());
+                        if (id != null && id.equals(targetAmmoId)) {
+                            total += s.getCount();
+                        }
+                    }
+                }
+            }
+        }
+        return total;
     }
 
-    public void clearTarget() {
-        this.setTarget(null);
-        this.setLastHurtByPlayer(null);
-        this.setLastHurtMob(null);
-        this.setLastHurtByMob(null);
+    // [신규] 탄약 박스가 비어있는지 확인
+    private boolean isAmmoBoxEmpty(ItemStack boxStack) {
+        CompoundTag rootTag = boxStack.getTag();
+        if (rootTag == null || !rootTag.contains("BlockEntityTag", 10)) return true; // 태그 없으면 빈 것 취급
+        
+        CompoundTag blockEntityTag = rootTag.getCompound("BlockEntityTag");
+        if (!blockEntityTag.contains("Items", 9)) return true; // 아이템 리스트 없으면 빈 것
+
+        net.minecraft.core.NonNullList<ItemStack> contents = 
+            net.minecraft.core.NonNullList.withSize(15, ItemStack.EMPTY);
+        net.minecraft.world.ContainerHelper.loadAllItems(blockEntityTag, contents);
+
+        for (ItemStack s : contents) {
+            if (!s.isEmpty()) return false; // 하나라도 들어있으면 안 빈 것
+        }
+        return true;
+    }
+
+    // [신규] 용병 인벤토리의 빈 탄약 박스를 보급 상자로 반납
+    private void returnEmptyAmmoBoxes(Container chest) {
+        for (int i = 0; i < this.inventory.getContainerSize(); i++) {
+            ItemStack myStack = this.inventory.getItem(i);
+            ResourceLocation regId = net.minecraftforge.registries.ForgeRegistries.ITEMS.getKey(myStack.getItem());
+            
+            // 내 인벤토리에 탄약 박스가 있고, 그게 비어있다면
+            if (regId != null && regId.toString().equals("jeg:ammo_box") && isAmmoBoxEmpty(myStack)) {
+                
+                // 보급 상자(chest)의 빈 슬롯을 찾음
+                for (int j = 0; j < chest.getContainerSize(); j++) {
+                    if (chest.getItem(j).isEmpty()) {
+                        // 상자에 넣고 내 인벤에서 삭제
+                        chest.setItem(j, myStack.copy());
+                        this.inventory.removeItemNoUpdate(i); // 혹은 setItem(i, ItemStack.EMPTY)
+                        break; // 하나 반납했으면 루프 종료 (한 틱에 하나씩)
+                    }
+                }
+            }
+        }
     }
 
     public static enum ArmPose {
@@ -2305,15 +2654,76 @@ public abstract class AbstractRecruitEntity extends AbstractInventoryEntity{
         return false;
     }
 
+	
+// [수정됨] 크래시 해결 및 일반 음식 인식 로직 포함
+    public boolean canEatItemStack(ItemStack stack) {
+        if (stack.isEmpty()) return false;
 
-    public boolean canEatItemStack(ItemStack stack){
-        ResourceLocation location = ForgeRegistries.ITEMS.getKey(stack.getItem());
-
-        if(RecruitsServerConfig.FoodBlackList.get().contains(location.toString())){
-            return false;
+        // 1. 메카니즘 수통(Canteen) 체크 로직
+        // 복잡한 캐스팅이나 Capability 검사 없이 ID만 확인하여 안전하게 처리합니다.
+        ResourceLocation id = net.minecraftforge.registries.ForgeRegistries.ITEMS.getKey(stack.getItem());
+        if (id != null && id.toString().equals("mekanism:canteen")) {
+             // 수통이면 무조건 식량으로 간주합니다. 
+             // (내용물이 비어있는지 여부는 먹을 때(RecruitEatGoal) 판단하면 되므로, 
+             //  보급 단계에서는 "일단 도시락통이 있다"고 판단하는 것이 더 안전합니다.)
+             return true; 
         }
-        return stack.isEdible();
+
+        // 2. [필수] 일반 마인크래프트 음식(감자, 빵 등) 체크
+        // 이 줄이 있어야 감자를 식량으로 인식합니다.
+        if (stack.isEdible()) {
+            return true;
+        }
+
+        return false;
     }
+	@Override
+	public void completeUsingItem() {
+		ItemStack stack = this.getUseItem();
+		ResourceLocation id = ForgeRegistries.ITEMS.getKey(stack.getItem());
+
+		// [수통 사용 로직]
+		if (!stack.isEmpty() && id != null && id.toString().equals("mekanism:canteen")) {
+			
+			// 1. 액체 핸들러 가져오기
+			Optional<IFluidHandlerItem> handlerOpt = FluidUtil.getFluidHandler(stack).resolve();
+			
+			if (handlerOpt.isPresent()) {
+				IFluidHandlerItem handler = handlerOpt.get();
+				
+				// 2. 액체 소모 시도 (10mB를 빼냄)
+				// Mekanism 기본 설정상 영양 페이스트는 소량으로도 허기가 많이 찹니다.
+				int drainAmount = 10; 
+				FluidStack drained = handler.drain(drainAmount, IFluidHandler.FluidAction.EXECUTE);
+
+				// 3. 실제로 액체가 빠져나갔다면 회복 적용
+				if (!drained.isEmpty() && drained.getAmount() > 0) {
+					// 효과음
+					this.playSound(SoundEvents.GENERIC_DRINK, 0.5F, this.level().random.nextFloat() * 0.1F + 0.9F);
+
+					// 허기 회복 (Mekanism 기준 10mB면 꽤 많은 양입니다. 적절히 조절하세요)
+					// Recruits의 Max Hunger는 100입니다.
+					float healAmount = 40.0F; 
+					this.setHunger(Math.min(100F, this.getHunger() + healAmount));
+
+					// 사기 진작
+					if(this.getMorale() < 100) {
+						this.setMoral(this.getMorale() + 2.0F);
+					}
+				}
+			}
+			
+			// 4. 아이템 상태 업데이트 (액체가 줄어든 수통을 다시 인벤토리에 반영할 필요가 있음)
+			// AbstractInventoryEntity.resetItemInHand()가 호출되면서 
+			// 현재 손에 들고 있는(액체가 줄어든) 스택을 인벤토리로 되돌립니다.
+			
+			this.stopUsingItem();
+			return; 
+		}
+
+		// 일반 음식 로직
+		super.completeUsingItem();
+	}
 
     public void checkPayment(Container container) {
         if(RecruitsServerConfig.RecruitsPayment.get() && isOwned()){
@@ -2378,6 +2788,104 @@ public abstract class AbstractRecruitEntity extends AbstractInventoryEntity{
                 return NoPaymentAction.valueOf(name.toUpperCase());
             } catch (IllegalArgumentException e) {
                 return MORALE_LOSS;
+            }
+        }
+    }
+	// [신규] 나침반을 가지고 있는지 확인하는 헬퍼 메서드
+    public boolean hasCompass() {
+        // 인벤토리 전체(장비창 포함)를 순회하며 나침반 확인
+        for (int i = 0; i < this.inventory.getContainerSize(); i++) {
+            ItemStack stack = this.inventory.getItem(i);
+            if (!stack.isEmpty() && stack.getItem() == net.minecraft.world.item.Items.COMPASS) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // [신규] 텔레포트 조건 검사 및 실행
+    private void checkCompassTeleport() {
+        // 1. 따라가기(Follow) 상태가 아니면 작동 안 함
+        if (this.getFollowState() != 1) return;
+
+        // 2. 주인이 없거나 죽었으면 작동 안 함
+        LivingEntity owner = this.getOwner();
+        if (owner == null || !owner.isAlive()) return;
+
+        // 3. 탑승 중이거나(말, 배 등), 앉아있거나, 비행 중이면 작동 안 함 (안전 장치)
+        if (this.isPassenger() || this.isLeashed()) return;
+
+        // 4. 거리 체크: 12블록(거리제곱 144) 이상 떨어졌을 때만
+        double distanceSq = this.distanceToSqr(owner);
+        if (distanceSq < 576.0D) return;
+
+        // 5. [핵심] 인벤토리에 나침반이 있는지 확인
+        if (!hasCompass()) return;
+
+        // 6. 텔레포트 시도
+        this.tryToTeleportNearEntity(owner);
+    }
+
+	private void tryToTeleportNearEntity(LivingEntity target) {
+        BlockPos targetPos = target.blockPosition();
+
+        for (int i = 0; i < 10; ++i) {
+            int dx = this.random.nextInt(7) - 3; 
+            int dz = this.random.nextInt(7) - 3; 
+            int dy = this.random.nextInt(3) - 1; 
+
+            double finalX = target.getX() + dx;
+            double finalY = target.getY() + dy;
+            double finalZ = target.getZ() + dz;
+
+            if (canTeleportTo(new BlockPos((int)finalX, (int)finalY, (int)finalZ))) {
+                
+                // 1. 텔레포트 실행
+                this.teleportTo(finalX, finalY, finalZ);
+                
+                // 2. [추가됨] 나침반 1개 소모
+                this.consumeOneCompass();
+
+                // 3. 네비게이션 초기화 및 효과음
+                this.getNavigation().stop();
+                this.level().playSound(null, this.getX(), this.getY(), this.getZ(), 
+                        SoundEvents.ENDERMAN_TELEPORT, this.getSoundSource(), 1.0F, 1.0F);
+                
+                // [선택 사항] 소모되었다는 효과음 추가 (아이템 부서지는 소리 등)
+                // this.playSound(SoundEvents.ITEM_BREAK, 0.8F, 0.8F + this.level().random.nextFloat() * 0.4F);
+
+                return; 
+            }
+        }
+    }
+
+    // [신규] 텔레포트 도착 지점이 안전한지 검사
+    private boolean canTeleportTo(BlockPos pos) {
+        // 1. 발 디딜 땅이 단단한 블록인가?
+        boolean groundSolid = this.level().getBlockState(pos.below()).blocksMotion();
+        
+        // 2. 몸통 위치가 공기(또는 통과 가능)인가?
+        boolean bodyEmpty = this.level().getBlockState(pos).getCollisionShape(this.level(), pos).isEmpty();
+        
+        // 3. 머리 위치가 공기인가?
+        boolean headEmpty = this.level().getBlockState(pos.above()).getCollisionShape(this.level(), pos.above()).isEmpty();
+
+        return groundSolid && bodyEmpty && headEmpty;
+    }
+	
+	// [신규] 인벤토리에서 나침반 1개를 소모하는 메서드
+    private void consumeOneCompass() {
+        for (int i = 0; i < this.inventory.getContainerSize(); i++) {
+            ItemStack stack = this.inventory.getItem(i);
+            
+            // 아이템이 나침반인지 확인
+            if (!stack.isEmpty() && stack.getItem() == net.minecraft.world.item.Items.COMPASS) {
+                
+                // 1개 줄임 (만약 1개였다면 자동으로 사라짐)
+                stack.shrink(1);
+                
+                // 소모했으니 루프 종료 (한 번에 하나만 소모)
+                break;
             }
         }
     }

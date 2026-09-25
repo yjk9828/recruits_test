@@ -32,7 +32,7 @@ public interface ICompanion {
         if(leader.getUpkeepPos() != null) recruit.setUpkeepPos(leader.getUpkeepPos());
 
         recruit.setTarget(null);
-        recruit.setAggroState(leader.getState());
+        recruit.setState(leader.getState());
     }
 
     AbstractRecruitEntity get();
@@ -54,12 +54,12 @@ public interface ICompanion {
         this.get().setIsOwned(true);
         if(recruit.getHoldPos() != null) get().setHoldPos(recruit.getHoldPos());
         if(recruit.getMovePos() != null) get().setMovePos(recruit.getMovePos());
-        this.get().setGroupUUID(recruit.getGroup());
+        this.get().setGroup(recruit.getGroup());
         this.get().setKills(recruit.getKills());
         this.get().setXp(recruit.getXp());
         this.get().setXpLevel(recruit.getXpLevel());
 
-        this.get().setAggroState(recruit.getState());
+        this.get().setState(recruit.getState());
         this.get().setFollowState(recruit.getFollowState());
         this.get().setListen(recruit.getListen());
         this.get().setBiome((byte) recruit.getBiome());

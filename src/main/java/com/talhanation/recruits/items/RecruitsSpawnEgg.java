@@ -1,13 +1,10 @@
 package com.talhanation.recruits.items;
 
 import com.talhanation.recruits.Main;
-import com.talhanation.recruits.RecruitEvents;
 import com.talhanation.recruits.entities.AbstractRecruitEntity;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.ListTag;
-import net.minecraft.nbt.Tag;
 import net.minecraft.network.chat.Component;
-import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
@@ -20,6 +17,7 @@ import net.minecraftforge.common.ForgeSpawnEggItem;
 import net.minecraft.world.phys.Vec3;
 
 import net.minecraft.world.scores.PlayerTeam;
+import net.royawesome.jlibnoise.module.modifier.Abs;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.Optional;
@@ -60,7 +58,7 @@ public class RecruitsSpawnEgg extends ForgeSpawnEggItem {
 
 
             CompoundTag entityTag = stack.getTag();
-            if(entity instanceof AbstractRecruitEntity recruit && entityTag != null && !entityTag.isEmpty()) {
+            if(entity instanceof AbstractRecruitEntity recruit && entityTag != null) {
 
                 fillRecruit(recruit, entityTag, pos);
 
@@ -80,7 +78,6 @@ public class RecruitsSpawnEgg extends ForgeSpawnEggItem {
     public static void fillRecruit(AbstractRecruitEntity recruit, CompoundTag entityTag, BlockPos pos){
         CompoundTag nbt = entityTag.getCompound("EntityTag");
 
-        if(nbt.isEmpty()) return;
 
         if (nbt.contains("Team")) {
             String s = nbt.getString("Team");
@@ -96,14 +93,14 @@ public class RecruitsSpawnEgg extends ForgeSpawnEggItem {
         recruit.setCustomName(Component.literal(name));
 
         recruit.setXpLevel(nbt.getInt("Level"));
-        recruit.setAggroState(nbt.getInt("AggroState"));
+        recruit.setState(nbt.getInt("AggroState"));
         recruit.setFollowState(nbt.getInt("FollowState"));
         recruit.setShouldFollow(nbt.getBoolean("ShouldFollow"));
         recruit.setShouldMount(nbt.getBoolean("ShouldMount"));
         recruit.setShouldBlock(nbt.getBoolean("ShouldBlock"));
         recruit.setShouldProtect(nbt.getBoolean("ShouldProtect"));
         recruit.setFleeing(nbt.getBoolean("Fleeing"));
-
+        recruit.setGroup(nbt.getInt("Group"));
         recruit.setListen(nbt.getBoolean("Listen"));
         recruit.setIsFollowing(nbt.getBoolean("isFollowing"));
         recruit.setXp(nbt.getInt("Xp"));
@@ -129,22 +126,6 @@ public class RecruitsSpawnEgg extends ForgeSpawnEggItem {
                             nbt.getInt("HoldPosZ")));
                 }
                 */
-
-        if(nbt.contains("Group")){
-            Tag tag = nbt.get("Group");
-
-            int type = tag.getId();
-            if (type == Tag.TAG_INT) {
-                if(recruit.getOwner() != null){
-                    int oldGroupIndex = nbt.getInt("Group");
-                    RecruitEvents.handleGroupBackwardCompatibility(recruit, oldGroupIndex);
-                }
-                else recruit.setGroupUUID(null);
-            }
-            else{
-                recruit.setGroupUUID(nbt.getUUID("Group"));
-            }
-        }
 
         if (nbt.contains("MovePosX") && nbt.contains("MovePosY") && nbt.contains("MovePosZ")) {
             recruit.setShouldMovePos(nbt.getBoolean("ShouldMovePos"));
@@ -206,9 +187,7 @@ public class RecruitsSpawnEgg extends ForgeSpawnEggItem {
         }
 
         recruit.setPos(pos.getX() + 0.5, pos.getY() + 1 , pos.getZ() + 0.5);
+        //if(recruit instanceof BowmanEntity bowman) bowman.reassessWeaponGoal();
 
-        if(recruit.getGroup() != null){
-            RecruitEvents.recruitsGroupsManager.addMember(recruit.getGroup(), recruit.getUUID(), (ServerLevel) recruit.getCommandSenderWorld());
-        }
     }
 }

@@ -9,7 +9,6 @@ import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.ai.goal.Goal;
 import net.minecraft.world.item.BowItem;
-import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.ProjectileWeaponItem;
 import net.minecraft.world.phys.Vec3;
@@ -43,26 +42,17 @@ public class RecruitRangedBowAttackGoal<T extends BowmanEntity> extends Goal {
 
     public boolean canUse() {
         LivingEntity livingentity = this.recruit.getTarget();
-        if (livingentity != null && livingentity.isAlive()) {
-            if(!isHoldingBow(this.recruit)){
-                recruit.switchMainHandItem(RecruitRangedBowAttackGoal::isBow);
-
-                return false;
-            }
-
+        if (livingentity != null && livingentity.isAlive() && isHoldingBow(this.recruit)) {
             this.target = livingentity;
             float distance = this.target.distanceTo(this.recruit);
-
+            // if (mob.getOwner() != null && mob.getShouldFollow() && mob.getOwner().distanceTo(this.recruit) <= 25.00D && !(target.distanceTo(this.recruit) <= 7.00D)) return false;
             boolean canTackMovePos = canAttackMovePos();
+            //boolean notMounting = !mob.getShouldMount();
             boolean shouldRanged = this.recruit.getShouldRanged();
             boolean canAttack = this.recruit.canAttack(target);
             boolean notPassive = this.recruit.getState() != 3;
             boolean notNeedsToGetFood = !this.recruit.needsToGetFood();
             boolean canSee = this.recruit.getSensing().hasLineOfSight(target);
-            // Option 2: only engage targets that are actually visible. Without line of sight
-            // the target is dropped so the recruit does not chase enemies behind walls.
-            // (LoS in the area search is disabled; this goal-level check is the single source
-            // of truth for "may I act on this target".)
             if(!canSee){
                 recruit.setTarget(null);
                 return false;
@@ -74,12 +64,18 @@ public class RecruitRangedBowAttackGoal<T extends BowmanEntity> extends Goal {
     }
 
     public static boolean isHoldingBow(LivingEntity mob) {
-        return mob.isHolding(RecruitRangedBowAttackGoal::isBow);
-    }
+        String name = mob.getMainHandItem().getDescriptionId();
+        if(mob.isHolding(bow -> bow.is(Items.BOW))){
+            return true;
+        }
+        else if (mob.isHolding(bow -> bow.getItem() instanceof BowItem))
+            return true;
 
-    public static boolean isBow(ItemStack stack){
-        String name = stack.getDescriptionId();
-        return stack.is(Items.BOW) || stack.getItem() instanceof BowItem || stack.getItem() instanceof ProjectileWeaponItem || name.contains("bow");
+        else if (mob.isHolding(bow -> bow.getItem() instanceof ProjectileWeaponItem))
+            return true;
+
+        else
+            return name.contains("bow");
     }
 
     private boolean hasArrows(){
@@ -130,7 +126,7 @@ public class RecruitRangedBowAttackGoal<T extends BowmanEntity> extends Goal {
                 handleFollow(this.recruit.getOwner(), inRange, isFar, isClose);
             }
             else if(this.recruit.getShouldHoldPos() && this.recruit.getHoldPos() != null){
-                handleHoldPos(this.recruit.getHoldPos(), inRange);
+                handleHoldPos(this.recruit.getHoldPos(), inRange, isFar, isClose);
             }
             else {
                 handleWander(inRange, isFar, isClose);
@@ -185,14 +181,23 @@ public class RecruitRangedBowAttackGoal<T extends BowmanEntity> extends Goal {
             if (isFar) this.recruit.getNavigation().moveTo(target, this.speedModifier);
             if (isClose) this.recruit.fleeEntity(target);
         }
+        //if (!ownerClose) {
+        //    this.recruit.getNavigation().moveTo(owner, this.speedModifier);
+        //}
     }
 
-    private void handleHoldPos(@NotNull Vec3 pos, boolean inRange){
+    private void handleHoldPos(@NotNull Vec3 pos, boolean inRange, boolean isFar, boolean isClose){
         boolean posClose = pos.distanceToSqr(this.recruit.position()) <= 50;
 
         if (posClose) {
             if (inRange) this.recruit.getNavigation().stop();
         }
+        else {
+            //this.recruit.getNavigation().moveTo(pos.getX(), pos.getY(), pos.getZ(), 1);
+        }
+        //if (!ownerClose) {
+        //    this.recruit.getNavigation().moveTo(owner, this.speedModifier);
+        //}
     }
 
     private void handleWander(boolean inRange, boolean isFar, boolean isClose){

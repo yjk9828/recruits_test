@@ -1,10 +1,12 @@
 package com.talhanation.recruits.client.render;
+
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.talhanation.recruits.Main;
+import com.talhanation.recruits.client.models.RecruitHumanModel; // [중요] 임포트 추가
 import com.talhanation.recruits.client.render.layer.RecruitHumanBiomeLayer;
 import com.talhanation.recruits.client.render.layer.RecruitHumanCompanionLayer;
 import com.talhanation.recruits.client.render.layer.RecruitHumanTeamColorLayer;
-import com.talhanation.recruits.compat.musketmod.IWeapon;
+import com.talhanation.recruits.compat.IWeapon;
 import com.talhanation.recruits.entities.AbstractRecruitEntity;
 import com.talhanation.recruits.entities.CrossBowmanEntity;
 import net.minecraft.client.model.HumanoidModel;
@@ -50,8 +52,11 @@ public class RecruitHumanRenderer extends MobRenderer<AbstractRecruitEntity, Hum
     public ResourceLocation getTextureLocation(AbstractRecruitEntity recruit) {
         return TEXTURE[recruit.getVariant()];
     }
+
     public RecruitHumanRenderer(EntityRendererProvider.Context mgr) {
-        super(mgr, new HumanoidModel<>((mgr.bakeLayer(ModelLayers.PLAYER))), 0.5F);
+        // [수정] HumanoidModel 대신 새로 만든 RecruitHumanModel을 사용하도록 변경
+        super(mgr, new RecruitHumanModel(mgr.bakeLayer(ModelLayers.PLAYER)), 0.5F);
+        
         this.addLayer(new HumanoidArmorLayer<>(this, new HumanoidModel(mgr.bakeLayer(ModelLayers.PLAYER_INNER_ARMOR)), new HumanoidModel(mgr.bakeLayer(ModelLayers.PLAYER_OUTER_ARMOR)), mgr.getModelManager()));
         this.addLayer(new RecruitHumanTeamColorLayer(this));
         this.addLayer(new RecruitHumanBiomeLayer(this));
@@ -59,7 +64,6 @@ public class RecruitHumanRenderer extends MobRenderer<AbstractRecruitEntity, Hum
         //this.addLayer(new ArrowLayer<>(mgr, this));
         this.addLayer(new ItemInHandLayer<>(this, mgr.getItemInHandRenderer()));
         this.addLayer(new CustomHeadLayer<>(this, mgr.getModelSet(), mgr.getItemInHandRenderer()));
-
     }
 
 
@@ -124,5 +128,4 @@ public class RecruitHumanRenderer extends MobRenderer<AbstractRecruitEntity, Hum
             return HumanoidModel.ArmPose.ITEM;
         }
     }
-
 }

@@ -1,6 +1,8 @@
 package com.talhanation.recruits.entities;
 
-import com.talhanation.recruits.compat.musketmod.IWeapon;
+import com.talhanation.recruits.entities.ai.UseShield; // 이 줄을 파일 상단에 추가해야 합니다.
+
+import com.talhanation.recruits.compat.IWeapon;
 import com.talhanation.recruits.config.RecruitsServerConfig;
 import com.talhanation.recruits.entities.ai.RecruitMoveTowardsTargetGoal;
 import com.talhanation.recruits.entities.ai.RecruitRangedCrossbowAttackGoal;
@@ -37,6 +39,10 @@ import java.util.function.Predicate;
 
 import static com.talhanation.recruits.Main.isMusketModLoaded;
 
+// [추가] 대포 관련 AI import
+import com.talhanation.recruits.entities.ai.RecruitLandCannonAttackGoal; 
+import com.talhanation.recruits.entities.ai.RecruitLandCannonStrategicFire;
+
 
 public class CrossBowmanEntity extends AbstractRecruitEntity implements CrossbowAttackMob, IRangedRecruit, IStrategicFire {
 
@@ -60,14 +66,14 @@ public class CrossBowmanEntity extends AbstractRecruitEntity implements Crossbow
         this.entityData.define(SHOULD_STRATEGIC_FIRE, false);
     }
 
-    @Override
+	@Override
     public void addAdditionalSaveData(CompoundTag nbt) {
         super.addAdditionalSaveData(nbt);
 
         nbt.putBoolean("isChargingCrossbow", this.getChargingCrossbow());
 
+        // [수정] getStrategicFirePos() 사용 (get 추가)
         if(this.getStrategicFirePos() != null){
-
             nbt.putInt("StrategicFirePosX", this.getStrategicFirePos().getX());
             nbt.putInt("StrategicFirePosY", this.getStrategicFirePos().getY());
             nbt.putInt("StrategicFirePosZ", this.getStrategicFirePos().getZ());
@@ -89,13 +95,24 @@ public class CrossBowmanEntity extends AbstractRecruitEntity implements Crossbow
             this.setShouldStrategicFire(nbt.getBoolean("ShouldStrategicFire"));
         }
     }
+	
+    @Override
+    public int getBlockCoolDown(){
+        return 100;
+    }
+	
     @Override
     protected void registerGoals() {
         super.registerGoals();
+				// [신규] 대포(LandCannon) 운용 AI 등록 (우선순위 0)
+		this.goalSelector.addGoal(0, new RecruitLandCannonStrategicFire(this));
+        this.goalSelector.addGoal(1, new RecruitLandCannonAttackGoal(this));
+		this.goalSelector.addGoal(2, new RecruitRangedCrossbowAttackGoal(this, this.getMeleeStartRange()));
+		// UseShield AI를 우선순위 3으로 추가합니다.
+		this.goalSelector.addGoal(3, new UseShield(this)); 
         if(isMusketModLoaded){
-            this.goalSelector.addGoal(0, new RecruitRangedMusketAttackGoal(this, this.getMeleeStartRange()));
+            this.goalSelector.addGoal(4, new RecruitRangedMusketAttackGoal(this, this.getMeleeStartRange()));
         }
-        this.goalSelector.addGoal(0, new RecruitRangedCrossbowAttackGoal(this, this.getMeleeStartRange()));
         this.goalSelector.addGoal(8, new RecruitMoveTowardsTargetGoal(this, 1.15D, (float) this.getMeleeStartRange()));
     }
 
@@ -129,8 +146,11 @@ public class CrossBowmanEntity extends AbstractRecruitEntity implements Crossbow
         this.setCustomName(Component.literal("Crossbowman"));
         this.setCost(RecruitsServerConfig.CrossbowmanCost.get());
         this.setEquipment();
+        this.setDropEquipment();
         this.setRandomSpawnBonus();
         this.setPersistenceRequired();
+
+        this.setGroup(2);
 
         if(RecruitsServerConfig.RangedRecruitsNeedArrowsToShoot.get()){
             if(isMusketModLoaded && IWeapon.isMusketModWeapon(this.getMainHandItem())){
@@ -145,10 +165,11 @@ public class CrossBowmanEntity extends AbstractRecruitEntity implements Crossbow
         AbstractRecruitEntity.applySpawnValues(this);
     }
 
-    @Override
-    public boolean canHoldItem(ItemStack itemStack){
-        return !(itemStack.getItem() instanceof SwordItem || itemStack.getItem() instanceof ShieldItem) || itemStack.getItem() instanceof CrossbowItem;
-    }
+	@Override
+	public boolean canHoldItem(ItemStack itemStack){
+		// ShieldItem에 대한 제약을 제거하여 방패를 장착할 수 있도록 허용합니다.
+		return !(itemStack.getItem() instanceof SwordItem) || itemStack.getItem() instanceof CrossbowItem;
+	}
     public void performRangedAttack(@NotNull LivingEntity target, float v) {
 
     }
@@ -171,7 +192,7 @@ public class CrossBowmanEntity extends AbstractRecruitEntity implements Crossbow
     }
     @Override
     public double getMeleeStartRange() {
-        return 5D;
+        return 3D;
     }
 
     //Pillager
@@ -180,7 +201,7 @@ public class CrossBowmanEntity extends AbstractRecruitEntity implements Crossbow
         this.shootCrossbowProjectile(this, target, projectile, f, 1.6F);
     }
 
-    private boolean getChargingCrossbow() {
+    public boolean getChargingCrossbow() {
         return this.entityData.get(DATA_IS_CHARGING_CROSSBOW);
     }
 
@@ -191,20 +212,33 @@ public class CrossBowmanEntity extends AbstractRecruitEntity implements Crossbow
     public boolean canFireProjectileWeapon(ProjectileWeaponItem weaponItem) {
         return weaponItem.equals(Items.CROSSBOW);
     }
-    public void onCrossbowAttackPerformed() {
+	public void onCrossbowAttackPerformed() {
         this.noActionTime = 0;
     }
 
+    // [중요 수정] IStrategicFire 인터페이스 구현 메서드 (get 붙임)
     public void setStrategicFirePos(BlockPos pos) {
-        this.entityData.set(STRATEGIC_FIRE_POS, Optional.of(pos));
+        if (pos != null) {
+            this.entityData.set(STRATEGIC_FIRE_POS, Optional.of(pos));
+        } else {
+            this.entityData.set(STRATEGIC_FIRE_POS, Optional.empty());
+        }
     }
+	@Override // [수정] getStrategicFirePos로 이름 변경 및 Override
     public BlockPos getStrategicFirePos(){
         return this.entityData.get(STRATEGIC_FIRE_POS).orElse(null);
     }
 
+    public void clearArrowsPos(){
+        this.entityData.set(STRATEGIC_FIRE_POS, Optional.empty());
+    }
+
+// [중요 수정] IStrategicFire 인터페이스 구현 메서드
+    @Override 
     public void setShouldStrategicFire(boolean bool) {
         this.entityData.set(SHOULD_STRATEGIC_FIRE, bool);
     }
+	@Override // [수정] getShouldStrategicFire로 이름 변경 및 Override
     public boolean getShouldStrategicFire(){
         return this.entityData.get(SHOULD_STRATEGIC_FIRE);
     }
@@ -213,9 +247,4 @@ public class CrossBowmanEntity extends AbstractRecruitEntity implements Crossbow
         return RecruitsServerConfig.CrossbowmanStartEquipments.get();
     }
 
-
-    @Override
-    public Predicate<ItemStack> getWeaponType() {
-        return itemStack -> itemStack.getItem() instanceof CrossbowItem;
-    }
 }

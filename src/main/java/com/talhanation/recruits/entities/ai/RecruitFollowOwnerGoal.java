@@ -24,13 +24,35 @@ public class RecruitFollowOwnerGoal extends Goal {
         this.stopDistance = 7;
     }
 
+    // [Helper] 동적 정지 거리 계산
+    private double getAdjustedStopDistance() {
+        double baseStop = this.stopDistance;
+        // 차량에 타고 있다면?
+        if (this.recruit.getVehicle() != null) {
+            // 차량 너비 가져오기 (LandBrigg = 3.5)
+            float vehicleWidth = this.recruit.getVehicle().getBbWidth();
+            // (차량 너비 * 1.2)^2 만큼 여유를 둠. 
+            // 예: 3.5 * 1.2 = 4.2 -> 제곱하면 약 17.6
+            // 즉 4~5블록 떨어진 곳에서 멈춤
+            double widthBuffer = (vehicleWidth * 4.2D);
+            return baseStop + (widthBuffer * widthBuffer);
+        }
+        return baseStop;
+    }
+
     public boolean canUse() {
         long i = this.recruit.getCommandSenderWorld().getGameTime();
         if (i - this.lastCanUseCheck >= 10L) {
             this.lastCanUseCheck = i;
             LivingEntity livingentity = this.recruit.getOwner();
             LivingEntity target = this.recruit.getTarget();
-            double start = target == null ? startDistance : startDistance + 50;
+            double start = target == null ? startDistance : startDistance + 100;
+            
+            // [수정] 시작 거리도 차량 탑승 시 늘려줌
+            if (this.recruit.getVehicle() != null) {
+                start += (this.recruit.getVehicle().getBbWidth() * this.recruit.getVehicle().getBbWidth());
+            }
+
             if (livingentity == null) {
                 return false;
             }
@@ -53,7 +75,8 @@ public class RecruitFollowOwnerGoal extends Goal {
         if (this.recruit.getNavigation().isDone()) {
             return false;
         }
-        return !(this.recruit.distanceToSqr(this.owner) <= this.stopDistance) && this.recruit.getShouldFollow() && !recruit.getFleeing() && recruit.getFollowState() == 1 && !recruit.needsToGetFood() && !recruit.getShouldMount() && !recruit.getShouldMovePos();
+        // [수정] getAdjustedStopDistance() 사용
+        return !(this.recruit.distanceToSqr(this.owner) <= this.getAdjustedStopDistance()) && this.recruit.getShouldFollow() && !recruit.getFleeing() && recruit.getFollowState() == 1 && !recruit.needsToGetFood() && !recruit.getShouldMount() && !recruit.getShouldMovePos();
     }
 
     public void start() {

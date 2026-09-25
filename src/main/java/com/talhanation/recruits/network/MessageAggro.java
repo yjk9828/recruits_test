@@ -19,14 +19,14 @@ public class MessageAggro implements Message<MessageAggro> {
     private UUID player;
     private UUID recruit;
     private int state;
-    private UUID group;
+    private int group;
     private boolean fromGui;
 
 
     public MessageAggro() {
     }
 
-    public MessageAggro(UUID player, int state, UUID group) {
+    public MessageAggro(UUID player, int state, int group) {
         this.player = player;
         this.state = state;
         this.group = group;
@@ -62,7 +62,7 @@ public class MessageAggro implements Message<MessageAggro> {
     public MessageAggro fromBytes(FriendlyByteBuf buf) {
         this.player = buf.readUUID();
         this.state = buf.readInt();
-        this.group = buf.readUUID();
+        this.group = buf.readInt();
         if (this.recruit != null) this.recruit = buf.readUUID();
         this.fromGui = buf.readBoolean();
         return this;
@@ -71,7 +71,7 @@ public class MessageAggro implements Message<MessageAggro> {
     public void toBytes(FriendlyByteBuf buf) {
         buf.writeUUID(this.player);
         buf.writeInt(this.state);
-        buf.writeUUID(this.group);
+        buf.writeInt(this.group);
         buf.writeBoolean(this.fromGui);
         if (this.recruit != null) buf.writeUUID(this.recruit);
     }

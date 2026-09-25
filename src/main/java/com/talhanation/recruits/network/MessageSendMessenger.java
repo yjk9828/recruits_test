@@ -57,7 +57,6 @@ public class MessageSendMessenger implements Message<MessageSendMessenger> {
                 }
 
                 if(start){
-                    messenger.setIsTreatyMessenger(false);
                     messenger.start();
                 }
             }

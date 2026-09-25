@@ -33,7 +33,8 @@ import net.minecraft.world.level.ServerLevelAccessor;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.common.ForgeMod;
 import org.jetbrains.annotations.NotNull;
-
+import com.talhanation.recruits.entities.ai.RecruitLandCannonAttackGoal; // [추가]
+import com.talhanation.recruits.entities.ai.RecruitLandCannonStrategicFire; // [추가]
 import javax.annotation.Nullable;
 import java.util.List;
 import java.util.Optional;
@@ -60,11 +61,11 @@ public class BowmanEntity extends AbstractRecruitEntity implements IRangedRecrui
     public void addAdditionalSaveData(CompoundTag nbt) {
         super.addAdditionalSaveData(nbt);
 
-        if(this.StrategicFirePos() != null){
-
-            nbt.putInt("StrategicFirePosX", this.StrategicFirePos().getX());
-            nbt.putInt("StrategicFirePosY", this.StrategicFirePos().getY());
-            nbt.putInt("StrategicFirePosZ", this.StrategicFirePos().getZ());
+// [수정] 여기 있는 4개의 StrategicFirePos()를 전부 getStrategicFirePos()로 변경
+        if(this.getStrategicFirePos() != null){ // get 붙이기
+            nbt.putInt("StrategicFirePosX", this.getStrategicFirePos().getX()); // get 붙이기
+            nbt.putInt("StrategicFirePosY", this.getStrategicFirePos().getY()); // get 붙이기
+            nbt.putInt("StrategicFirePosZ", this.getStrategicFirePos().getZ()); // get 붙이기
             nbt.putBoolean("ShouldStrategicFire", this.getShouldStrategicFire());
         }
     }
@@ -85,13 +86,16 @@ public class BowmanEntity extends AbstractRecruitEntity implements IRangedRecrui
     @Override
     protected void registerGoals() {
         super.registerGoals();
+				// [신규] 대포(LandCannon) 운용 AI 등록 (우선순위 1: 탑승 시 최우선 작동)
+		this.goalSelector.addGoal(0, new RecruitLandCannonStrategicFire(this));		
+        this.goalSelector.addGoal(1, new RecruitLandCannonAttackGoal(this));
         this.goalSelector.addGoal(2, new RecruitStrategicFire(this, 10, 20));
         this.goalSelector.addGoal(4, new RecruitRangedBowAttackGoal<>(this, 1.15D, 10, 20, 44.0F, getMeleeStartRange()));
         this.goalSelector.addGoal(8, new RecruitMoveTowardsTargetGoal(this, 1.15D, (float) this.getMeleeStartRange()));
     }
     @Override
     public double getMeleeStartRange() {
-        return 5D;
+        return 3D;
     }
 
 
@@ -124,9 +128,12 @@ public class BowmanEntity extends AbstractRecruitEntity implements IRangedRecrui
         this.setCustomName(Component.literal("Bowman"));
         this.setCost(RecruitsServerConfig.BowmanCost.get());
         this.setEquipment();
+        this.setDropEquipment();
         this.setRandomSpawnBonus();
         this.setPersistenceRequired();
 
+        this.setGroup(2);
+        
         if(RecruitsServerConfig.RangedRecruitsNeedArrowsToShoot.get()){
             RecruitsPatrolSpawn.setRangedArrows(this);
         }
@@ -140,7 +147,6 @@ public class BowmanEntity extends AbstractRecruitEntity implements IRangedRecrui
 
     @Override
     public void performRangedAttack(@NotNull LivingEntity target, float v) {
-        if(this.level().isClientSide()) return;
         if (this.getMainHandItem().getItem() instanceof BowItem) {
 
             if(AttackUtil.canPerformHorseAttack(this, target)){
@@ -173,8 +179,7 @@ public class BowmanEntity extends AbstractRecruitEntity implements IRangedRecrui
 
             double angle = IRangedRecruit.getAngleDistanceModifier(distance, 47, 4) + IRangedRecruit.getAngleHeightModifier(distance, heightDiff, 1.00D) / 100;
             float force = 1.90F + IRangedRecruit.getForceDistanceModifier(distance, 1.90F);
-            double morale = this.getMorale();
-            float accuracy = Math.max(6 - (float) (0.1F * morale), 0);
+            float accuracy = 0.75F; // 0 = 100%
             //Main.LOGGER.info("Distance: " + distance);
                                                 //angle   = 0.196F           //force     //accuracy 0 = 100%
             arrow.shoot(d0, d1 + d3 * angle, d2, force, accuracy);
@@ -200,7 +205,6 @@ public class BowmanEntity extends AbstractRecruitEntity implements IRangedRecrui
     }
 
     public void performRangedAttackXYZ(double x, double y, double z, float v, float angle, float force) {
-        if(this.level().isClientSide()) return;
         if (this.getMainHandItem().getItem() instanceof BowItem) {
             ItemStack itemstack = this.getProjectile(this.getItemInHand(InteractionHand.MAIN_HAND));
 
@@ -220,10 +224,8 @@ public class BowmanEntity extends AbstractRecruitEntity implements IRangedRecrui
             double d1 = y - this.getY();
             double d2 = z - this.getZ();
             double d3 = Mth.sqrt((float) (d0 * d0 + d2 * d2));
-            double morale = this.getMorale();
-            float accuracy = 3F + Math.max(6 - (float) (0.1F * morale), 0);
                                                      //angle            //force             //accuracy 0 = 100%
-            arrow.shoot(d0, d1 + d3 + angle, d2, force + 1.95F, accuracy);
+            arrow.shoot(d0, d1 + d3 + angle, d2, force + 1.95F, 2.5F);
 
             this.playSound(SoundEvents.ARROW_SHOOT, 1.0F, 1.0F / (this.getRandom().nextFloat() * 0.4F + 0.8F));
             this.getCommandSenderWorld().addFreshEntity(arrow);
@@ -254,7 +256,8 @@ public class BowmanEntity extends AbstractRecruitEntity implements IRangedRecrui
         if(pos != null) this.entityData.set(STRATEGIC_FIRE_POS, Optional.of(pos));
         else this.entityData.set(STRATEGIC_FIRE_POS, Optional.empty());
     }
-    public BlockPos StrategicFirePos(){
+	@Override
+    public BlockPos getStrategicFirePos(){
         return this.entityData.get(STRATEGIC_FIRE_POS).orElse(null);
     }
 
@@ -288,10 +291,5 @@ public class BowmanEntity extends AbstractRecruitEntity implements IRangedRecrui
 
     public List<List<String>> getEquipment(){
         return RecruitsServerConfig.BowmanStartEquipments.get();
-    }
-
-    @Override
-    public Predicate<ItemStack> getWeaponType() {
-        return itemStack -> itemStack.getItem() instanceof BowItem;
     }
 }

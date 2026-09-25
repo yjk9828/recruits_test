@@ -8,11 +8,6 @@ import net.minecraft.world.item.ItemStack;
 
 public interface IVillagerWorker {
    ItemStack getCustomProfessionItem();
-
-   default ItemStack getCustomProfessionItem2() {
-      return null;
-   }
-
    //ONLY FOR SCREEN
    Screen getSpecialScreen(AbstractRecruitEntity recruit, Player player);
    //For SCREEN + CONTAINER

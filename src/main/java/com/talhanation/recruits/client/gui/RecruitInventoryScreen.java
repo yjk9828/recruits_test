@@ -3,24 +3,22 @@ package com.talhanation.recruits.client.gui;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.talhanation.recruits.Main;
 import com.talhanation.recruits.RecruitEvents;
-import com.talhanation.recruits.client.ClientManager;
-import com.talhanation.recruits.client.gui.widgets.ScrollDropDownMenu;
+import com.talhanation.recruits.client.gui.group.RecruitsGroup;
+import com.talhanation.recruits.compat.SmallShips;
 import com.talhanation.recruits.compat.workers.IVillagerWorker;
-import com.talhanation.recruits.compat.smallships.SmallShips;
 import com.talhanation.recruits.entities.*;
 import com.talhanation.recruits.inventory.RecruitInventoryMenu;
 import com.talhanation.recruits.network.*;
-import com.talhanation.recruits.world.RecruitsGroup;
 import de.maxhenkel.corelib.inventory.ScreenBase;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.inventory.InventoryScreen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.util.FastColor;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.ItemStack;
@@ -28,6 +26,12 @@ import net.minecraft.world.item.Items;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
 import net.minecraftforge.client.gui.widget.ExtendedButton;
+
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Locale;
+import java.util.stream.Collectors;
 
 @OnlyIn(Dist.CLIENT)
 public class RecruitInventoryScreen extends ScreenBase<RecruitInventoryMenu> {
@@ -85,16 +89,19 @@ public class RecruitInventoryScreen extends ScreenBase<RecruitInventoryMenu> {
     private static final int fontColor = 4210752;
     private final AbstractRecruitEntity recruit;
     private final Inventory playerInventory;
+    public static List<RecruitsGroup> groups;
     private RecruitsGroup currentGroup;
     private int follow;
     private int aggro;
     private Button clearUpkeep;
     private boolean canPromote;
     private boolean buttonsSet;
-    private Button rightListenButton;
-    private Button leftListenButton;
-    private Button moreButton;
-    private ScrollDropDownMenu<RecruitsGroup> groupSelectionDropDownMenu;
+
+    // Search related fields
+    private EditBox groupSearchField;
+    private List<RecruitsGroup> suggestionList = new ArrayList<>();
+    private boolean showSuggestions = false;
+
     public RecruitInventoryScreen(RecruitInventoryMenu recruitContainer, Inventory playerInventory, Component title) {
         super(RESOURCE_LOCATION, recruitContainer, playerInventory, Component.literal(""));
         this.recruit = recruitContainer.getRecruit();
@@ -110,18 +117,18 @@ public class RecruitInventoryScreen extends ScreenBase<RecruitInventoryMenu> {
         int zeroLeftPos = leftPos + 180;
         int zeroTopPos = topPos + 10;
         int topPosGab = 5;
-        this.canPromote = (this.recruit.getXpLevel() >= 3) || this.recruit instanceof IVillagerWorker;
+        this.canPromote = this.recruit.getXpLevel() >= 3;
 
         this.clearWidgets();
         //PASSIVE
         ExtendedButton buttonPassive = new ExtendedButton(zeroLeftPos - 270, zeroTopPos + (20 + topPosGab) * 0, 80, 20, TEXT_PASSIVE,
-                button -> {
-                    this.aggro = recruit.getState();
-                    if (this.aggro != 3) {
-                        this.aggro = 3;
-                        Main.SIMPLE_CHANNEL.sendToServer(new MessageAggroGui(aggro, recruit.getUUID()));
-                    }
-                });
+            button -> {
+                this.aggro = recruit.getState();
+                if (this.aggro != 3) {
+                    this.aggro = 3;
+                    Main.SIMPLE_CHANNEL.sendToServer(new MessageAggroGui(aggro, recruit.getUUID()));
+                }
+            });
         buttonPassive.setTooltip(Tooltip.create(TOOLTIP_PASSIVE));
         addRenderableWidget(buttonPassive);
 
@@ -147,7 +154,6 @@ public class RecruitInventoryScreen extends ScreenBase<RecruitInventoryMenu> {
                     }
                 });
         buttonAggressive.setTooltip(Tooltip.create(TOOLTIP_AGGRESSIVE));
-        buttonAggressive.active = !(recruit instanceof VillagerNobleEntity);
         addRenderableWidget(buttonAggressive);
 
         //RAID
@@ -160,7 +166,6 @@ public class RecruitInventoryScreen extends ScreenBase<RecruitInventoryMenu> {
                     }
                 });
         buttonRaid.setTooltip(Tooltip.create(TOOLTIP_RAID));
-        buttonRaid.active = !(recruit instanceof VillagerNobleEntity);
         addRenderableWidget(buttonRaid);
 
         //CLEAR TARGET
@@ -174,12 +179,11 @@ public class RecruitInventoryScreen extends ScreenBase<RecruitInventoryMenu> {
 
         //MOUNT
         ExtendedButton buttonMount =  new ExtendedButton(zeroLeftPos - 270, zeroTopPos + (20 + topPosGab) * 5, 80, 20, TEXT_MOUNT,
-                button -> {
-                    Main.SIMPLE_CHANNEL.sendToServer(new MessageMountEntityGui(recruit.getUUID(), false));
-                }
-        );
+            button -> {
+                Main.SIMPLE_CHANNEL.sendToServer(new MessageMountEntityGui(recruit.getUUID(), false));
+            }
+            );
         buttonMount.setTooltip(Tooltip.create(TOOLTIP_MOUNT));
-        buttonMount.active = !(recruit instanceof VillagerNobleEntity);
         addRenderableWidget(buttonMount);
 
 
@@ -206,7 +210,6 @@ public class RecruitInventoryScreen extends ScreenBase<RecruitInventoryMenu> {
                     }
                 });
         buttonFollow.setTooltip(Tooltip.create(TOOLTIP_FOLLOW));
-        buttonFollow.active = !(recruit instanceof VillagerNobleEntity);
         addRenderableWidget(buttonFollow);
 
 
@@ -246,7 +249,6 @@ public class RecruitInventoryScreen extends ScreenBase<RecruitInventoryMenu> {
                     }
                 });
         buttonHoldMyPos.setTooltip(Tooltip.create(TOOLTIP_HOLD_MY_POS));
-        buttonHoldMyPos.active = !(recruit instanceof VillagerNobleEntity);
         addRenderableWidget(buttonHoldMyPos);
 
         //Dismount
@@ -268,62 +270,59 @@ public class RecruitInventoryScreen extends ScreenBase<RecruitInventoryMenu> {
                 }
         ));
         backToMount.setTooltip(Tooltip.create(TOOLTIP_BACK_TO_MOUNT));
-        backToMount.active = !(recruit instanceof VillagerNobleEntity);
         addRenderableWidget(backToMount);
 
-        //CLEAR UPKEEP
-        this.clearUpkeep = addRenderableWidget(new ExtendedButton(zeroLeftPos - 270, zeroTopPos + (20 + topPosGab) * 6, 80, 20, TEXT_CLEAR_UPKEEP,
-                button -> {
-                    Main.SIMPLE_CHANNEL.sendToServer(new MessageClearUpkeepGui(recruit.getUUID()));
-                    clearUpkeep.active = false;
-                }
-        ));
-        this.clearUpkeep.setTooltip(Tooltip.create(TOOLTIP_CLEAR_UPKEEP));
-        this.clearUpkeep.active = this.recruit.hasUpkeep();
+		String btnText = recruit.isOnlyPvP() ? "ONLY P: ON" : "ONLY P: OFF";
+			int textColor = recruit.isOnlyPvP() ? 0x00FF00 : 0xFF0000; // ON이면 초록, OFF면 빨강 느낌 (텍스트 색상은 버튼 내부 구현에 따라 다를 수 있음)
+
+			ExtendedButton buttonOnlyPvP = new ExtendedButton(zeroLeftPos - 270, zeroTopPos + (20 + topPosGab) * 6, 80, 20, Component.literal(btnText),
+				button -> {
+					// 1. 현재 상태 반전
+					boolean newState = !recruit.isOnlyPvP();
+					
+					// 2. 클라이언트 측 즉시 반영 (반응성을 위해)
+					recruit.setOnlyPvP(newState);
+					
+					// 3. 버튼 텍스트 업데이트
+					button.setMessage(Component.literal(newState ? "ONLY P: ON" : "ONLY P: OFF"));
+					
+					// 4. 서버로 패킷 전송
+					Main.SIMPLE_CHANNEL.sendToServer(new MessageTogglePvP(recruit.getUUID(), newState));
+				}
+			);
+			
+			// 툴팁 설정 (설명 추가)
+			buttonOnlyPvP.setTooltip(Tooltip.create(Component.literal("ON: Attack Players/Recruits Only\nOFF: Attack All Hostiles")));
+			
+			addRenderableWidget(buttonOnlyPvP);
 
         //LISTEN
-        leftListenButton =  new ExtendedButton(leftPos + 77, topPos + 100, 12, 12, Component.literal("<"), button -> {
+        addRenderableWidget(new ExtendedButton(leftPos + 77, topPos + 100, 12, 12, Component.literal("<"), button -> {
             Main.SIMPLE_CHANNEL.sendToServer(new MessageListen(!recruit.getListen(), recruit.getUUID()));
-        });
-        leftListenButton.active = !(recruit instanceof VillagerNobleEntity);
-        addRenderableWidget(leftListenButton);
+        }));
 
-        rightListenButton = new ExtendedButton(leftPos + 77 + 81, topPos + 100, 12, 12, Component.literal(">"), button -> {
+        addRenderableWidget(new ExtendedButton(leftPos + 77 + 81, topPos + 100, 12, 12, Component.literal(">"), button -> {
             Main.SIMPLE_CHANNEL.sendToServer(new MessageListen(!recruit.getListen(), recruit.getUUID()));
-        });
-        rightListenButton.active = !(recruit instanceof VillagerNobleEntity);
-        addRenderableWidget(rightListenButton);
+        }));
 
-        //more
-        moreButton = new ExtendedButton(leftPos + 77 + 55, topPos + 4, 40, 12, Component.literal("..."),
+        //more (Disband)
+        addRenderableWidget(new ExtendedButton(leftPos + 77 + 55, topPos + 4, 40, 12, Component.literal("..."),
                 button -> {
-                    minecraft.setScreen(new RecruitMoreScreen(this, this.recruit, this.playerInventory.player));
+                    minecraft.setScreen(new DisbandScreen(this, this.recruit, this.playerInventory.player));
                 }
-        );
-        moreButton.active = !(recruit instanceof VillagerNobleEntity);
-        addRenderableWidget(moreButton);
+        ));
 
-        if(recruit instanceof VillagerNobleEntity){
-            return;
-        }
-        //promote
+        // Promote / Rank / Special 버튼 로직
         if(recruit instanceof ICompanion || recruit instanceof IVillagerWorker){
-            Button promoteButton = addRenderableWidget(new ExtendedButton(zeroLeftPos, zeroTopPos + (20 + topPosGab) * 8, 80, 20, TEXT_SPECIAL,
+            // 1. Special 버튼 (기존 유지, 8번 슬롯)
+            Button specialButton = addRenderableWidget(new ExtendedButton(zeroLeftPos, zeroTopPos + (20 + topPosGab) * 8, 80, 20, TEXT_SPECIAL,
                     button -> {
                         if(recruit instanceof ScoutEntity scout){
                             this.minecraft.setScreen(new ScoutScreen(scout, getMinecraft().player));
                             return;
                         }
-                        else if(recruit instanceof SiegeEngineerEntity siegeEngineer){
-                            this.minecraft.setScreen(new SiegeEngineerScreen(siegeEngineer, getMinecraft().player));
-                            return;
-                        }
                         else if(recruit instanceof MessengerEntity messenger){
-                            this.minecraft.setScreen(new MessengerMainScreen(messenger, getMinecraft().player));
-                            return;
-                        }
-                        else if(recruit instanceof AbstractLeaderEntity leader){
-                            this.minecraft.setScreen(new PatrolLeaderScreen(leader, getMinecraft().player));
+                            this.minecraft.setScreen(new MessengerScreen(messenger, getMinecraft().player));
                             return;
                         }
                         else if(recruit instanceof IVillagerWorker worker && worker.hasOnlyScreen()){
@@ -335,11 +334,20 @@ public class RecruitInventoryScreen extends ScreenBase<RecruitInventoryMenu> {
                     }
             ));
 
-            promoteButton.setTooltip(Tooltip.create(TOOLTIP_SPECIAL));
-            promoteButton.active = canPromote;
+            specialButton.setTooltip(Tooltip.create(TOOLTIP_SPECIAL));
+            specialButton.active = canPromote;
+
+            // 2. [추가] "Rank" 버튼 (7번 슬롯) - 진급 화면 열기
+            addRenderableWidget(new ExtendedButton(zeroLeftPos, zeroTopPos + (20 + topPosGab) * 7, 80, 20, Component.literal("Rank"),
+                    button -> {
+                        RecruitEvents.openPromoteScreen(this.playerInventory.player, this.recruit);
+                        this.onClose();
+                    }
+            ));
 
         }
         else {
+            // 기본 병과일 경우 Promote 버튼만 표시 (8번 슬롯)
             Button promoteButton = addRenderableWidget(new ExtendedButton(zeroLeftPos, zeroTopPos + (20 + topPosGab) * 8, 80, 20, TEXT_PROMOTE,
                     button -> {
                         RecruitEvents.openPromoteScreen(this.playerInventory.player, this.recruit);
@@ -348,61 +356,136 @@ public class RecruitInventoryScreen extends ScreenBase<RecruitInventoryMenu> {
             ));
             promoteButton.setTooltip(Tooltip.create(canPromote ? TOOLTIP_PROMOTE : TOOLTIP_DISABLED_PROMOTE));
             promoteButton.active = canPromote;
-
         }
+
+        // Group Search Field Initialization
+        this.groupSearchField = new EditBox(this.font, leftPos + 77, topPos + 114, 93, 12, Component.literal("Group"));
+        this.groupSearchField.setResponder(this::onSearchInput);
+        
+        // 소유자가 아니면 수정 불가
+        boolean isOwner = Minecraft.getInstance().player.getUUID().equals(recruit.getOwnerUUID());
+        this.groupSearchField.setEditable(isOwner);
+        this.groupSearchField.setVisible(isOwner);
+        
+        this.addRenderableWidget(this.groupSearchField);
     }
+
+    // Search Input Handler
+    private void onSearchInput(String text) {
+        if (groups == null || text.isEmpty()) {
+            this.showSuggestions = false;
+            return;
+        }
+
+        String query = text.toLowerCase(Locale.ROOT);
+        this.suggestionList = groups.stream()
+                .filter(g -> g.getName().toLowerCase(Locale.ROOT).contains(query))
+                .limit(5)
+                .collect(Collectors.toList());
+
+        this.showSuggestions = !suggestionList.isEmpty() && this.groupSearchField.isFocused();
+    }
+	
 
     @Override
     protected void containerTick() {
         super.containerTick();
-        if(ClientManager.groups != null && !ClientManager.groups.isEmpty() && !buttonsSet){
-            this.currentGroup = ClientManager.getGroup(recruit.getGroup());
-
-            groupSelectionDropDownMenu = new ScrollDropDownMenu<>(currentGroup, leftPos + 77,topPos + 114,  93, 12, ClientManager.groups,
-                    RecruitsGroup::getName,
-                    (selected) ->{
-                        this.currentGroup = selected;
-                        Main.SIMPLE_CHANNEL.sendToServer(new MessageGroup(currentGroup.getUUID(), recruit.getUUID()));
-                    }
-            );
-            groupSelectionDropDownMenu.setBgFillSelected(FastColor.ARGB32.color(255, 139, 139, 139));
-            groupSelectionDropDownMenu.visible = Minecraft.getInstance().player.getUUID().equals(recruit.getOwnerUUID());
-            RecruitsGroup group = ClientManager.getGroup(recruit.getGroup());
-            groupSelectionDropDownMenu.canSelect = group == null || recruit.getGroup() == null || !recruit.getUUID().equals(group.leaderUUID);
-            addRenderableWidget(groupSelectionDropDownMenu);
+        // Wait for groups to be loaded from server
+        if(groups != null && !groups.isEmpty() && !buttonsSet){
+            groups.sort(Comparator.comparingInt(RecruitsGroup::getId));
+            this.currentGroup = getCurrentGroup(recruit.getGroup());
+            
+            // Update text box with current group name
+            if (this.currentGroup != null) {
+                this.groupSearchField.setValue(this.currentGroup.getName());
+            }
+            
             this.buttonsSet = true;
+        }
+        
+        if (this.groupSearchField != null) {
+            this.groupSearchField.tick();
         }
     }
 
-    @Override
-    public void mouseMoved(double x, double y) {
-        if(groupSelectionDropDownMenu != null){
-            groupSelectionDropDownMenu.onMouseMove(x,y);
+    private RecruitsGroup getCurrentGroup(int x) {
+        RecruitsGroup group = null;
+        if (groups != null) {
+            for (RecruitsGroup recruitsGroup : groups) {
+                if (recruitsGroup.getId() == x) {
+                    group = recruitsGroup;
+                    break;
+                }
+            }
         }
-        super.mouseMoved(x, y);
+        return group;
     }
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        if (groupSelectionDropDownMenu != null && groupSelectionDropDownMenu.isMouseOver(mouseX, mouseY)) {
-            groupSelectionDropDownMenu.onMouseClick(mouseX, mouseY);
-            return true;
+        // Handle suggestion clicks
+        if (showSuggestions && groupSearchField.isFocused()) {
+            int startX = groupSearchField.getX();
+            int startY = groupSearchField.getY() + groupSearchField.getHeight();
+            int width = groupSearchField.getWidth();
+            int itemHeight = 12;
+            int totalHeight = suggestionList.size() * itemHeight;
+
+            if (mouseX >= startX && mouseX < startX + width && mouseY >= startY && mouseY < startY + totalHeight) {
+                int index = (int) ((mouseY - startY) / itemHeight);
+                if (index >= 0 && index < suggestionList.size()) {
+                    RecruitsGroup selected = suggestionList.get(index);
+                    this.currentGroup = selected;
+                    this.groupSearchField.setValue(selected.getName());
+                    this.showSuggestions = false;
+                    this.setFocused(null); // Remove focus
+                    
+                    // Send packet
+                    Main.SIMPLE_CHANNEL.sendToServer(new MessageGroup(currentGroup.getId(), recruit.getUUID()));
+                    return true;
+                }
+            }
         }
+        
         return super.mouseClicked(mouseX, mouseY, button);
     }
-    @Override
-    public boolean mouseScrolled(double x, double y, double d) {
-        if(groupSelectionDropDownMenu != null) groupSelectionDropDownMenu.mouseScrolled(x,y,d);
-        return super.mouseScrolled(x, y, d);
-    }
+
     @Override
     public void render(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTicks) {
         super.render(guiGraphics, mouseX, mouseY, partialTicks);
 
-        if (groupSelectionDropDownMenu != null) {
-            groupSelectionDropDownMenu.renderWidget(guiGraphics, mouseX, mouseY, partialTicks);
+        // Render Suggestions
+        if (showSuggestions && groupSearchField.isFocused()) {
+            renderSuggestions(guiGraphics, mouseX, mouseY);
         }
     }
+
+    // Suggestion Rendering Logic
+    private void renderSuggestions(GuiGraphics guiGraphics, int mouseX, int mouseY) {
+        int startX = groupSearchField.getX();
+        int startY = groupSearchField.getY() + groupSearchField.getHeight();
+        int width = groupSearchField.getWidth();
+        int itemHeight = 12;
+        int totalHeight = suggestionList.size() * itemHeight;
+
+        // Background
+        guiGraphics.fill(startX, startY, startX + width, startY + totalHeight, 0xFF000000);
+        guiGraphics.renderOutline(startX, startY, width, totalHeight, 0xFFAAAAAA);
+
+        for (int i = 0; i < suggestionList.size(); i++) {
+            RecruitsGroup group = suggestionList.get(i);
+            int itemY = startY + (i * itemHeight);
+            
+            boolean isHovered = (mouseX >= startX && mouseX < startX + width && mouseY >= itemY && mouseY < itemY + itemHeight);
+            
+            if (isHovered) {
+                guiGraphics.fill(startX + 1, itemY, startX + width - 1, itemY + itemHeight, 0xFF333333);
+            }
+
+            guiGraphics.drawString(this.font, group.getName(), startX + 4, itemY + 2, 0xFFFFFFFF, false);
+        }
+    }
+
     protected void renderLabels(GuiGraphics guiGraphics, int mouseX, int mouseY) {
         super.renderLabels(guiGraphics, mouseX, mouseY);
         int health = Mth.ceil(recruit.getHealth());
@@ -443,10 +526,6 @@ public class RecruitInventoryScreen extends ScreenBase<RecruitInventoryMenu> {
         guiGraphics.drawString(font, "" + hunger, k + gap, l + 50, fontColor, false);
         guiGraphics.pose().popPose();
 
-        /*
-        font.draw(matrixStack, "Moral:", k, l + 30, fontColor);
-        font.draw(matrixStack, ""+ recruit.getKills(), k + 25, l + 30, fontColor);
-        */
         k = 79;//rechst links
         l = 19;//höhe
         // command
@@ -481,12 +560,7 @@ public class RecruitInventoryScreen extends ScreenBase<RecruitInventoryMenu> {
 
         ItemStack profItem1 = null;
         ItemStack profItem2 = null;
-
-        if (this.recruit instanceof IVillagerWorker worker) {
-            profItem1 = worker.getCustomProfessionItem();
-            profItem2 = worker.getCustomProfessionItem2();
-        }
-        else if(this.recruit instanceof HorsemanEntity){
+        if(this.recruit instanceof HorsemanEntity){
             profItem1 = Items.IRON_SWORD.getDefaultInstance();
             profItem2 = Items.SADDLE.getDefaultInstance();
         }
@@ -498,6 +572,9 @@ public class RecruitInventoryScreen extends ScreenBase<RecruitInventoryMenu> {
             profItem1 = Items.IRON_SWORD.getDefaultInstance();
             profItem2 = Items.SHIELD.getDefaultInstance();
         }
+        else if(this.recruit instanceof RecruitEntity){
+            profItem1 = Items.IRON_SWORD.getDefaultInstance();
+        }
         else if(this.recruit instanceof BowmanEntity){
             profItem1 = Items.BOW.getDefaultInstance();
         }
@@ -508,15 +585,15 @@ public class RecruitInventoryScreen extends ScreenBase<RecruitInventoryMenu> {
             profItem1 = Items.FEATHER.getDefaultInstance();
             profItem2 = Items.PAPER.getDefaultInstance();
         }
-        else if(this.recruit instanceof CommanderEntity){
+        else if(this.recruit instanceof PatrolLeaderEntity){
             profItem1 = Items.IRON_SWORD.getDefaultInstance();
             profItem2 = Items.GOAT_HORN.getDefaultInstance();
         }
         else if(this.recruit instanceof CaptainEntity){
             profItem1 = SmallShips.getSmallShipsItem();
         }
-        else if(this.recruit instanceof RecruitEntity){
-            profItem1 = Items.IRON_SWORD.getDefaultInstance();
+        else if (this instanceof IVillagerWorker worker){
+            profItem1 = worker.getCustomProfessionItem();
         }
         guiGraphics.pose().pushPose();
         guiGraphics.pose().scale(0.8F, 0.8F, 1F);

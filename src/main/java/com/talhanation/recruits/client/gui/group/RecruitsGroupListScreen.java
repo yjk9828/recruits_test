@@ -2,12 +2,9 @@ package com.talhanation.recruits.client.gui.group;
 
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.talhanation.recruits.Main;
-import com.talhanation.recruits.client.ClientManager;
 import com.talhanation.recruits.client.gui.widgets.ListScreenBase;
-import com.talhanation.recruits.client.gui.widgets.ListScreenListBase;
 import com.talhanation.recruits.network.MessageApplyNoGroup;
-import com.talhanation.recruits.network.MessageUpdateGroup;
-import com.talhanation.recruits.world.RecruitsGroup;
+import com.talhanation.recruits.network.MessageToServerRequestUpdateGroupList;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
@@ -23,7 +20,7 @@ import net.minecraftforge.client.gui.widget.ExtendedButton;
 import java.util.Locale;
 
 @OnlyIn(Dist.CLIENT)
-public class RecruitsGroupListScreen extends ListScreenBase implements IGroupSelection {
+public class RecruitsGroupListScreen extends ListScreenBase {
 
     protected static final ResourceLocation TEXTURE = new ResourceLocation(Main.MOD_ID, "textures/gui/select_player.png");
     protected static final Component TITLE = Component.translatable("gui.recruits.groups.title");
@@ -45,7 +42,6 @@ public class RecruitsGroupListScreen extends ListScreenBase implements IGroupSel
     private RecruitsGroup selected;
     private Button editButton;
     private Button removeButton;
-    private Button addButton;
     private final Player player;
     private int gapTop;
     private int gapBottom;
@@ -58,7 +54,7 @@ public class RecruitsGroupListScreen extends ListScreenBase implements IGroupSel
     @Override
     protected void init() {
         super.init();
-        clearWidgets();
+        Main.SIMPLE_CHANNEL.sendToServer(new MessageToServerRequestUpdateGroupList());
 
         gapTop = (int) (this.height * 0.1);
         gapBottom = (int) (this.height * 0.1);
@@ -72,7 +68,7 @@ public class RecruitsGroupListScreen extends ListScreenBase implements IGroupSel
         if (groupList != null) {
             groupList.updateSize(width, height, guiTop + HEADER_SIZE + SEARCH_HEIGHT, guiTop + HEADER_SIZE + units * UNIT_SIZE);
         } else {
-            groupList = new RecruitsGroupList(width, height, guiTop + HEADER_SIZE + SEARCH_HEIGHT, guiTop + HEADER_SIZE + units * UNIT_SIZE, CELL_HEIGHT, this, null);
+            groupList = new RecruitsGroupList(width, height, guiTop + HEADER_SIZE + SEARCH_HEIGHT, guiTop + HEADER_SIZE + units * UNIT_SIZE, CELL_HEIGHT, this);
         }
         String string = searchBox != null ? searchBox.getValue() : "";
         searchBox = new EditBox(font, guiLeft + 8, guiTop + HEADER_SIZE, 220, SEARCH_HEIGHT, Component.literal(""));
@@ -85,22 +81,20 @@ public class RecruitsGroupListScreen extends ListScreenBase implements IGroupSel
 
         int buttonY = guiTop + HEADER_SIZE + 5 + units * UNIT_SIZE;
 
-        this.addButton = createAddGroupButton(guiLeft + 7, buttonY);
-        addRenderableWidget(this.addButton);
+        addRenderableWidget(createAddGroupButton(guiLeft + 7, buttonY));
 
         this.editButton =  createEditGroupButton(guiLeft + 87, buttonY);
+        this.editButton.active = this.selected != null;
         addRenderableWidget(this.editButton);
 
         this.removeButton = createRemoveGroupButton(guiLeft + 167, buttonY);
+        this.removeButton.active = this.selected != null;
         addRenderableWidget(this.removeButton);
-
-        checkButtons();
     }
 
     @Override
     public void tick() {
         super.tick();
-        ClientManager.updateGroups();
         if(searchBox != null){
             searchBox.tick();
         }
@@ -113,22 +107,15 @@ public class RecruitsGroupListScreen extends ListScreenBase implements IGroupSel
         return new ExtendedButton(x, y, 60, 20, REMOVE_BUTTON, button -> {
             if (selected != null) {
 
-                ClientManager.groups.removeIf(predicate -> selected.getUUID().equals(predicate.getUUID()));
+                Main.SIMPLE_CHANNEL.sendToServer(new MessageApplyNoGroup(player.getUUID(), selected.getId()));
 
-                selected.removed = true;
-                Main.SIMPLE_CHANNEL.sendToServer(new MessageApplyNoGroup(player.getUUID(), selected.getUUID()));
-                Main.SIMPLE_CHANNEL.sendToServer(new MessageUpdateGroup(selected));
-                this.selected = null;
+                RecruitsGroupList.groups.remove(selected);
+
+                RecruitsGroupList.saveGroups(false);
 
                 this.init();
             }
         });
-    }
-
-    public void checkButtons(){
-        this.editButton.active = selected != null;
-        this.removeButton.active = selected != null;
-        this.addButton.active = selected == null;
     }
 
     private Button createAddGroupButton(int x, int y) {
@@ -148,7 +135,8 @@ public class RecruitsGroupListScreen extends ListScreenBase implements IGroupSel
         boolean flag = super.keyPressed(p_96552_, p_96553_, p_96554_);
         this.selected = null;
         this.groupList.setFocused(null);
-        this.checkButtons();
+        this.editButton.active = false;
+        this.removeButton.active = false;
 
         return flag;
     }
@@ -190,49 +178,24 @@ public class RecruitsGroupListScreen extends ListScreenBase implements IGroupSel
             lastSearch = string;
         }
     }
-    private long lastClickTime = 0;
-    private static final long DOUBLE_CLICK_THRESHOLD = 200;
+
     @Override
-    public boolean mouseClicked(double x, double y, int button) {
-        if (groupList != null && groupList.isMouseOver(x,y)) {
-            groupList.mouseClicked(x, y, button);
-
-            RecruitsGroupEntry entry = groupList.getGroupEntryAtPosition(x,y);
-            if(entry != null){
-                selected = entry.getGroup();
-            }
-            else selected = null;
-
-            boolean isDoubleClick = false;
-            long now = System.currentTimeMillis();
-
-            if (button == 0) {
-                if (now - lastClickTime <= DOUBLE_CLICK_THRESHOLD) {
-                    isDoubleClick = true;
-                }
-                lastClickTime = now;
-            }
-
-            if (isDoubleClick && this.selected != null) {
-                onDoubleClick(this.selected);
-            }
+    public boolean mouseClicked(double x, double y, int z) {
+        if(groupList != null) groupList.mouseClicked(x,y,z);
+        boolean flag = super.mouseClicked(x, y, z);
+        if(this.groupList.getFocused() != null){
+            this.selected = this.groupList.getFocused().getGroup();
+            
+            // [FIXED] selected.id -> selected.getId() 로 변경
+            this.editButton.active = selected.getId() != 0;
+            this.removeButton.active =  selected.getId() != 0;
         }
-        this.checkButtons();
 
-        return super.mouseClicked(x, y, button);
-    }
-
-    private void onDoubleClick(RecruitsGroup group) {
-        this.minecraft.setScreen(new EditOrAddGroupScreen(this, group));
+        return flag;
     }
 
     public RecruitsGroup getSelected(){
         return this.selected;
-    }
-
-    @Override
-    public ListScreenListBase<RecruitsGroupEntry> getGroupList() {
-        return this.groupList;
     }
 
     @Override

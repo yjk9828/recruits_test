@@ -55,7 +55,7 @@ public class RecruitStrategicFire extends Goal {
 
     @Override
     public void tick() {
-        this.pos = this.bowman.StrategicFirePos();
+        this.pos = this.bowman.getStrategicFirePos(); // get 붙이기;
         if (pos != null) {
             double d0 = this.bowman.distanceToSqr(pos.getX(), bowman.getY(), pos.getZ());
 
@@ -118,6 +118,21 @@ public class RecruitStrategicFire extends Goal {
                         angle = 0.4F;
                         force = 0.8F;
                     }
+					// --- 여기서부터 새로 추가된 더 먼 거리의 탄도 계산 ---
+					else if (d0 < 15000) { // 약 122블록
+						angle = 0.5F;
+						force = 0.9F;
+					} else if (d0 < 20000) { // 약 141블록
+						angle = 0.8F;
+						force = 1.2F;
+					} else if (d0 < 25000) { // 약 158블록
+						angle = 1.2F;
+						force = 1.6F;
+					} else { // 그 이상
+						angle = 1.5F;
+						force = 2.0F;
+					}
+
 
 
                     this.bowman.performRangedAttackXYZ(pos.getX(), pos.getY(), pos.getZ(), BowItem.getPowerForTime(i), angle, force);

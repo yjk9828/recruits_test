@@ -1,5 +1,6 @@
 package com.talhanation.recruits.entities.ai.async;
 
+import net.minecraft.client.Minecraft;
 import net.minecraft.server.level.ServerLevel;
 
 import java.util.function.Consumer;

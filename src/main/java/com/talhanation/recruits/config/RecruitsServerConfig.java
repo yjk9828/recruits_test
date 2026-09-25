@@ -4,7 +4,6 @@ import com.electronwill.nightconfig.core.file.CommentedFileConfig;
 import com.electronwill.nightconfig.core.io.WritingMode;
 import com.talhanation.recruits.entities.AbstractRecruitEntity;
 import net.minecraftforge.common.ForgeConfigSpec;
-import net.minecraftforge.event.level.ExplosionEvent;
 import net.minecraftforge.fml.common.Mod;
 
 import java.nio.file.Path;
@@ -38,6 +37,7 @@ public class RecruitsServerConfig {
     public static ForgeConfigSpec.IntValue HorsemanCost;
     public static ForgeConfigSpec.IntValue CrossbowmanCost;
     public static ForgeConfigSpec.ConfigValue<List<String>> TargetBlackList;
+	public static ForgeConfigSpec.ConfigValue<List<String>> TargetWhiteList; //화이트 리스트
     public static ForgeConfigSpec.ConfigValue<List<String>> MountWhiteList;
     public static ForgeConfigSpec.ConfigValue<List<List<String>>> RecruitStartEquipments;
     public static ForgeConfigSpec.ConfigValue<List<List<String>>> ShieldmanStartEquipments;
@@ -47,6 +47,10 @@ public class RecruitsServerConfig {
     public static ForgeConfigSpec.ConfigValue<List<List<String>>> NomadStartEquipments;
     public static ForgeConfigSpec.ConfigValue<List<String>> AcceptedDamagesourceImmunity;
     public static ForgeConfigSpec.ConfigValue<List<String>> FoodBlackList;
+    public static ForgeConfigSpec.BooleanValue AggroRecruitsBlockPlaceBreakEvents;
+    public static ForgeConfigSpec.BooleanValue NeutralRecruitsBlockPlaceBreakEvents;
+    public static ForgeConfigSpec.BooleanValue AggroRecruitsBlockInteractingEvents;
+    public static ForgeConfigSpec.BooleanValue NeutralRecruitsBlockInteractingEvents;
     public static ForgeConfigSpec.BooleanValue ShouldRecruitPatrolsSpawn;
     public static ForgeConfigSpec.BooleanValue ShouldPillagerPatrolsSpawn;
     public static ForgeConfigSpec.DoubleValue RecruitPatrolsSpawnChance;
@@ -68,6 +72,7 @@ public class RecruitsServerConfig {
     public static ForgeConfigSpec.BooleanValue UseAsyncPathfinding;
     public static ForgeConfigSpec.IntValue AsyncPathfindingThreadsCount;
     public static ForgeConfigSpec.BooleanValue UseAsyncTargetFinding;
+    public static ForgeConfigSpec.IntValue AsyncTargetFindingThreadsCount;
     public static ForgeConfigSpec.IntValue MaxPlayersInFaction;
     public static ForgeConfigSpec.IntValue MaxNPCsInFaction;
     public static ForgeConfigSpec.BooleanValue ShouldFactionEditingBeAllowed;
@@ -78,29 +83,14 @@ public class RecruitsServerConfig {
     public static ForgeConfigSpec.IntValue RecruitsPaymentAmount;
     public static ForgeConfigSpec.EnumValue<AbstractRecruitEntity.NoPaymentAction> RecruitsNoPaymentAction;
     public static ForgeConfigSpec.BooleanValue QuickStartPillagerRaid;
-    public static ForgeConfigSpec.BooleanValue BlockPlacingBreakingOnlyWhenClaimed;
-    public static ForgeConfigSpec.BooleanValue ExplosionProtectionInClaims;
-    public static ForgeConfigSpec.BooleanValue CascadeThePriceOfClaims;
-    public static ForgeConfigSpec.IntValue ClaimingCost;
-    public static ForgeConfigSpec.IntValue ChunkCost;
-    public static ForgeConfigSpec.IntValue MaxClaimChunks;
-    public static ForgeConfigSpec.IntValue SiegeClaimsRecruitsAmount;
-    public static ForgeConfigSpec.IntValue SiegeClaimsConquerTime;
-    public static ForgeConfigSpec.BooleanValue NobleVillagerNeedsVillagers;
-    public static ForgeConfigSpec.BooleanValue ShouldProfessionBlocksTrade;
-    public static ForgeConfigSpec.BooleanValue NobleVillagerSpawn;
-    public static ForgeConfigSpec.BooleanValue AllowClaiming;
-    public static ForgeConfigSpec.BooleanValue FogOfWarEnabled;
-    public static ForgeConfigSpec.BooleanValue RecruitsStarving;
-    public static ForgeConfigSpec.BooleanValue RecruitsUpdateHungerAndMorale;
-    public static ForgeConfigSpec.BooleanValue SiegeRequiresOwnerOnline;
-
     public static ArrayList<String> TARGET_BLACKLIST = new ArrayList<>(
             Arrays.asList("minecraft:creeper", "minecraft:ghast", "minecraft:enderman", "minecraft:zombified_piglin", "corpse:corpse", "minecraft:armorstand"));
+    public static ArrayList<String> TARGET_WHITELIST = new ArrayList<>(
+            Arrays.asList("minecraft:zombie")); //화이트
     public static ArrayList<String> FOOD_BLACKLIST = new ArrayList<>(
             Arrays.asList("minecraft:poisonous_potato", "minecraft:spider_eye", "minecraft:pufferfish"));
     public static ArrayList<String> MOUNTS = new ArrayList<>(
-            Arrays.asList("minecraft:camel", "minecraft:mule", "minecraft:donkey", "minecraft:horse", "minecraft:llama", "minecraft:pig", "minecraft:boat", "minecraft:minecart", "smallships:cog", "smallships:brigg", "smallships:galley", "smallships:drakkar", "siegeweapons:catapult", "siegeweapons:ballista"));
+            Arrays.asList("minecraft:mule", "minecraft:donkey", "minecraft:horse", "minecraft:llama", "minecraft:pig", "minecraft:boat", "minecraft:minecart", "smallships:cog", "smallships:brigg", "smallships:galley", "smallships:drakkar", "camels:camel"));
     public static ArrayList<List<String>> START_EQUIPMENT_RECRUIT = new ArrayList<>(
             List.of(Arrays.asList("minecraft:wooden_sword", "", "", "", "", ""),
                     Arrays.asList("minecraft:stone_sword", "", "", "", "", "")
@@ -181,6 +171,13 @@ public class RecruitsServerConfig {
                         \tEntities in this list won't be targeted at all, for example: ["minecraft:creeper", "minecraft:sheep", ...]""")
                 .worldRestart()
                 .define("TargetBlackList", TARGET_BLACKLIST);
+        TargetWhiteList = BUILDER.comment("""
+                        
+                        Target WHITElist
+                        \t(takes effect after restart)
+                        \tEntities in this list won't be targeted at all, for example: ["minecraft:creeper", "minecraft:sheep", ...]""")
+                .worldRestart()
+                .define("TargetWhiteList", TARGET_WHITELIST);
 
         FoodBlackList = BUILDER.comment("""
                         
@@ -323,25 +320,6 @@ public class RecruitsServerConfig {
                 .worldRestart()
                 .define("RecruitsChunkLoading", true);
 
-        RecruitsStarving = BUILDER.comment("""
-                        RecruitsStarving
-                        \t(takes effect after restart)
-                        \t
-                        Should recruit-starve to death if their hunger drops to 0 ?
-                        default: false""")
-
-                .worldRestart()
-                .define("RecruitsStarving", false);
-
-        RecruitsUpdateHungerAndMorale = BUILDER.comment("""
-                        RecruitsStarving
-                        \t(takes effect after restart)
-                        \t
-                        Should recruits update hunger and morale state?
-                        default: false""")
-
-                .worldRestart()
-                .define("RecruitsUpdateHungerAndMorale", true);
         /*
         Village Config
          */
@@ -357,29 +335,6 @@ public class RecruitsServerConfig {
                         \tdefault: true""")
                 .worldRestart()
                 .define("RecruitTablesPOIReleasing", true);
-        NobleVillagerSpawn = BUILDER.comment("""
-                        
-                        Does a Villager decide to become noble? Condition: 7 Villagers and no Noble Villager nearby
-                        \t(takes effect after restart)
-                        \tdefault: true""")
-                .worldRestart()
-                .define("NobleVillagerSpawns", true);
-
-        NobleVillagerNeedsVillagers = BUILDER.comment("""
-                        
-                        Does the Noble Villager need Villagers in the area to spawn a Recruit?
-                        \t(takes effect after restart)
-                        \tdefault: true""")
-                .worldRestart()
-                .define("NobleVillagerNeedsVillagers", true);
-
-        ShouldProfessionBlocksTrade = BUILDER.comment("""
-                        
-                        Should Recruits Profession Blocks be traded by Villagers?
-                        \t(takes effect after restart)
-                        \tdefault: false""")
-                .worldRestart()
-                .define("ShouldProfessionBlocksTrade", false);
 
         OverrideIronGolemSpawn = BUILDER.comment("""
                         
@@ -542,6 +497,45 @@ public class RecruitsServerConfig {
                         \tdefault: true""")
                 .worldRestart()
                 .define("QuickStartPillagerRaid", true);
+
+        /*
+        Block Event Config
+         */
+
+        BUILDER.pop();
+        BUILDER.comment("Block Event Config:").push("BlockEvents");
+
+        AggroRecruitsBlockPlaceBreakEvents = BUILDER.comment("""
+                        
+                        Should Aggressive Recruits attack enemy players that are placing or breaking blocks immediately?
+                        \t(takes effect after restart)
+                        \tdefault: true""")
+                .worldRestart()
+                .define("AggroRecruitsBlockPlaceBreakEvents", true);
+
+        NeutralRecruitsBlockPlaceBreakEvents = BUILDER.comment("""
+                        
+                        Should Neutral Recruits attack enemy players that are placing or breaking blocks immediately?
+                        \t(takes effect after restart)
+                        \tdefault: true""")
+                .worldRestart()
+                .define("NeutralRecruitsBlockPlaceBreakEvents", true);
+
+        AggroRecruitsBlockInteractingEvents = BUILDER.comment("""
+                        
+                        Should Aggressive Recruits attack enemy players that are interacting with blocks immediately?
+                        \t(takes effect after restart)
+                        \tdefault: true""")
+                .worldRestart()
+                .define("AggroRecruitsBlockInteractingEvents", true);
+
+        NeutralRecruitsBlockInteractingEvents = BUILDER.comment("""
+                        
+                        Should Neutral Recruits attack enemy players that are interacting with blocks immediately?
+                        \t(takes effect after restart)
+                        \tdefault: true""")
+                .worldRestart()
+                .define("NeutralRecruitsBlockInteractingEvents", true);
 
         /*
         Patrol Config
@@ -744,7 +738,7 @@ public class RecruitsServerConfig {
                         \t(takes effect after restart)
                         \tdefault: true""")
                 .worldRestart()
-                .define("UseAsyncPathfinding", true);
+                .define("UsePathfindingAsync", true);
 
         AsyncPathfindingThreadsCount = BUILDER.comment("""
                         How much threads to use for pathfinding.
@@ -753,91 +747,27 @@ public class RecruitsServerConfig {
                         \t(takes effect after restart)
                         \tdefault: 1""")
                 .worldRestart()
-                .defineInRange("AsyncPathfindingThreadsCount", 1, 1, Runtime.getRuntime().availableProcessors());
+                .defineInRange("AsyncPathfindingThreads", 1, 1, Runtime.getRuntime().availableProcessors());
 
-        BUILDER.pop();
-        BUILDER.pop();
-        BUILDER.comment("Claiming Config:").push("Claiming");
-
-        AllowClaiming = BUILDER.comment("""
-                        Should the claiming feature be allowed?
+        UseAsyncTargetFinding = BUILDER.comment("""
+                        Use asynchronous target finding run on multithread executor.
+                        Improves TPS on huge numbers of recruits (and somehow FPS) a lot,
+                            but useless if machine has only one physical core available.
+                        Can lead to some small delays in target finding (recruits finding who to attack),
+                            but I have seen none of case when I was testing so should work fine.
                         \t(takes effect after restart)
                         \tdefault: true""")
                 .worldRestart()
-                .define("AllowClaiming", true);
+                .define("UseTargetFindingAsync", true);
 
-        ClaimingCost = BUILDER.comment("""
-                        The amount of currency that claiming a 5x5 area of chunk should cost.
+        AsyncTargetFindingThreadsCount = BUILDER.comment("""
+                        How much threads to use for target finding.
+                        Needs to be calibrated manually.
+                        Usually good value is n/6, where n is amount of logical cores (threads) you have on CPU.
                         \t(takes effect after restart)
-                        \tdefault: 64""")
+                        \tdefault: 1""")
                 .worldRestart()
-                .defineInRange("ClaimingCost", 64, 0, 1453);
-
-        ChunkCost = BUILDER.comment("""
-                        The amount of currency that increasing the claim by a chunk should cost.
-                        \t(takes effect after restart)
-                        \tdefault: 20""")
-                .worldRestart()
-                .defineInRange("ChunkCost", 15, 0, 1453);
-
-        MaxClaimChunks = BUILDER.comment("""
-                        The maximum amount of chunks a single claim territory can contain.
-                        The default claim area is 5x5 chunks, so values below 25 are not allowed.
-                        \t(takes effect after restart)
-                        \tdefault: 50""")
-                .worldRestart()
-                .defineInRange("MaxClaimChunks", 50, 25, 4096);
-
-        CascadeThePriceOfClaims = BUILDER.comment("""
-                        Should the price of claiming an area increase by the specified amount?
-                        Example: 1 Faction has already one Claim, the second would cost 2 x 64 = 128.
-                        \t(takes effect after restart)
-                        \tdefault: false""")
-                .worldRestart()
-                .define("CascadeThePriceOfClaims", false);
-
-        BlockPlacingBreakingOnlyWhenClaimed = BUILDER.comment("""
-                        Should block breaking and placing for players only be possible when the chunk is claimed by the faction.
-                        \t(takes effect after restart)
-                        \tdefault: false""")
-                .worldRestart()
-                .define("BlockPlacingBreakingOnlyWhenClaimed", false);
-
-        ExplosionProtectionInClaims = BUILDER.comment("""
-                        Should claims be protected from explosions.
-                        \t(takes effect after restart)
-                        \tdefault: false""")
-                .worldRestart()
-                .define("ExplosionBreaksBlocksInClaims", false);
-
-        SiegeRequiresOwnerOnline = BUILDER.comment("""
-                        Should a siege only be allowed to start when the claim owner (player) is currently online?
-                        If enabled and the owner is offline, attackers cannot initiate a siege.
-                        \\t(takes effect after restart)
-                        \\tdefault: false""")
-                .worldRestart()
-                .define("SiegeRequiresOwnerOnline", false);
-
-        SiegeClaimsRecruitsAmount = BUILDER.comment("""
-                        The amount of man power that is required to start a siege on a Claim.
-                        \t(takes effect after restart)
-                        \tdefault: 10""")
-                .worldRestart()
-                .defineInRange("SiegeClaimsRecruitsAmount", 10, 0, 1453);
-
-        SiegeClaimsConquerTime = BUILDER.comment("""
-                        The time in minutes that is required to conquer a Claim.
-                        \t(takes effect after restart)
-                        \tdefault: 10""")
-                .worldRestart()
-                .defineInRange("SiegeClaimsConquerTime", 10, 0, 1453);
-
-        FogOfWarEnabled = BUILDER.comment("""
-                        Should claims inside unexplored (fog-of-war) chunks be hidden on the world map?
-                        \t(takes effect after restart)
-                        \tdefault: true""")
-                .worldRestart()
-                .define("FogOfWarEnabled", true);
+                .defineInRange("AsyncTargetFindingThreads", 1, 1, Runtime.getRuntime().availableProcessors());
 
         SERVER = BUILDER.build();
     }

@@ -31,17 +31,7 @@ public class NomadAttackAI extends Goal {
         this.consumeArrows = RecruitsServerConfig.RangedRecruitsNeedArrowsToShoot.get();
     }
     public boolean canUse() {
-        LivingEntity target = nomad.getTarget();
-        if(nomad.getVehicle() instanceof AbstractHorse && target != null && !nomad.needsToGetFood() && !nomad.getShouldMount() && isHoldingBow() && nomad.getShouldRanged()){
-            // Option 2: only engage a visible target. Without line of sight the target is dropped
-            // so the mounted archer does not chase enemies behind cover.
-            if(!nomad.getSensing().hasLineOfSight(target)){
-                nomad.setTarget(null);
-                return false;
-            }
-            return true;
-        }
-        return false;
+        return nomad.getVehicle() instanceof AbstractHorse && nomad.getTarget() != null && !nomad.needsToGetFood() && !nomad.getShouldMount() && isHoldingBow() && nomad.getShouldRanged();
     }
 
     public boolean canContinueToUse() {
@@ -127,7 +117,7 @@ public class NomadAttackAI extends Goal {
                     if (i >= 20) {
                         this.nomad.stopUsingItem();
                         this.nomad.performRangedAttack(target, BowItem.getPowerForTime(i));
-                        float f = Mth.sqrt((float) d0) / 44.0F;
+                        float f = Mth.sqrt((float) d0) / 32;
                         int attackIntervalMax = 20;
                         int attackIntervalMin = 10;
                         this.attackTime = Mth.floor(f * (float) (attackIntervalMax - attackIntervalMin) + (float) attackIntervalMin);
@@ -139,3 +129,4 @@ public class NomadAttackAI extends Goal {
         }
     }
 }
+

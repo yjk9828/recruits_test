@@ -1,6 +1,6 @@
 package com.talhanation.recruits.network;
 
-import com.talhanation.recruits.FactionEvents;
+import com.talhanation.recruits.TeamEvents;
 import de.maxhenkel.corelib.net.Message;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.server.level.ServerLevel;
@@ -29,25 +29,19 @@ public class MessageRemoveFromTeam implements Message<MessageRemoveFromTeam> {
         ServerPlayer sender = Objects.requireNonNull(context.getSender());
         ServerLevel level = sender.serverLevel();
 
-        boolean foundOnline = false;
-        for (ServerPlayer serverPlayer : level.players()) {
-            if (serverPlayer.getName().getString().equals(player)) {
-                FactionEvents.tryToRemoveFromTeam(
-                        serverPlayer.getTeam(),
-                        sender,
-                        serverPlayer,
-                        level,
-                        player,
-                        true
-                );
-                foundOnline = true;
-                break;
-            }
+        // --------- 수정된 부분 시작 ---------
+        ServerPlayer target = level.getServer().getPlayerList().getPlayerByName(player);
+        if (target != null && target.getTeam() != null) {
+            TeamEvents.tryToRemoveFromTeam(
+                target.getTeam(),   // 추방대상 팀
+                sender,             // 추방 명령자(리더 등)
+                target,             // 추방 대상
+                level,
+                player,             // 추방대상 이름
+                true
+            );
         }
-
-        if (!foundOnline) {
-            FactionEvents.removeOfflinePlayerFromTeam(sender, player, level);
-        }
+        // --------- 수정된 부분 끝 ---------
     }
 
     public MessageRemoveFromTeam fromBytes(FriendlyByteBuf buf) {

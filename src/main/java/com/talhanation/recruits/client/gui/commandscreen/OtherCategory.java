@@ -3,9 +3,9 @@ package com.talhanation.recruits.client.gui.commandscreen;
 import com.talhanation.recruits.Main;
 import com.talhanation.recruits.client.gui.CommandScreen;
 import com.talhanation.recruits.client.gui.group.RecruitsCommandButton;
-import com.talhanation.recruits.client.gui.faction.FactionMainScreen;
+import com.talhanation.recruits.client.gui.group.RecruitsGroup;
+import com.talhanation.recruits.client.gui.team.TeamMainScreen;
 import com.talhanation.recruits.network.*;
-import com.talhanation.recruits.world.RecruitsGroup;
 import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
@@ -55,145 +55,136 @@ public class OtherCategory implements ICommandCategory {
 
     @Override
     public void createButtons(CommandScreen screen, int x, int y, List<RecruitsGroup> groups, Player player) {
-        boolean isOneGroupActive = groups.stream().anyMatch(g -> !g.isDisabled());
+        boolean isAnyGroupAvailable = groups != null && !groups.isEmpty();
 
-        //PROTECT
+        // PROTECT
         RecruitsCommandButton protectButton = new RecruitsCommandButton(x, y - 25, TEXT_PROTECT,
                 button -> {
-                    if (screen.rayEntity != null && !groups.isEmpty()) {
-                        for(RecruitsGroup group : groups) {
-                            if (!group.isDisabled()) {
-                                Main.SIMPLE_CHANNEL.sendToServer(new MessageProtectEntity(player.getUUID(), screen.rayEntity.getUUID(), group.getUUID()));
-                                Main.SIMPLE_CHANNEL.sendToServer(new MessageMovement(player.getUUID(), 5, group.getUUID(), CommandScreen.formation.getIndex(), CommandScreen.tightFormation, CommandScreen.holdFormation));
-                            }
+                    List<Integer> targetIds = screen.getSelectedGroupIds();
+                    if (screen.rayEntity != null && !targetIds.isEmpty()) {
+                        for (Integer id : targetIds) {
+                            Main.SIMPLE_CHANNEL.sendToServer(new MessageProtectEntity(player.getUUID(), screen.rayEntity.getUUID(), id));
+                            Main.SIMPLE_CHANNEL.sendToServer(new MessageMovement(player.getUUID(), 5, CommandScreen.formation.getIndex(), id));
                         }
                         screen.sendCommandInChat(5);
                     }
                 });
         protectButton.setTooltip(Tooltip.create(TOOLTIP_PROTECT));
-        protectButton.active = isOneGroupActive && screen.rayEntity != null;
+        protectButton.active = isAnyGroupAvailable && screen.rayEntity != null;
         screen.addRenderableWidget(protectButton);
 
-        //MOUNT
+        // MOUNT
         RecruitsCommandButton mountButton = new RecruitsCommandButton(x, y + 25, TEXT_MOUNT,
                 button -> {
-                    if (screen.rayEntity != null && !groups.isEmpty()) {
-                        for (RecruitsGroup group : groups) {
-                            if (!group.isDisabled()) {
-                                Main.SIMPLE_CHANNEL.sendToServer(new MessageMountEntity(player.getUUID(), screen.rayEntity.getUUID(), group.getUUID()));
-                            }
+                    List<Integer> targetIds = screen.getSelectedGroupIds();
+                    if (screen.rayEntity != null && !targetIds.isEmpty()) {
+                        for (Integer id : targetIds) {
+                            Main.SIMPLE_CHANNEL.sendToServer(new MessageMountEntity(player.getUUID(), screen.rayEntity.getUUID(), id));
                         }
                         screen.sendCommandInChat(99);
                     }
                 });
         mountButton.setTooltip(Tooltip.create(TOOLTIP_MOUNT));
-        mountButton.active = isOneGroupActive && screen.rayEntity != null;
+        mountButton.active = isAnyGroupAvailable && screen.rayEntity != null;
         screen.addRenderableWidget(mountButton);
 
-        //TEAM
+        // TEAM (이건 그룹 선택과 상관없는 기능이므로 유지)
         RecruitsCommandButton factionButton = new RecruitsCommandButton(x - 60, y + 50, TEXT_TEAM,
                 button -> {
-                    screen.getMinecraft().setScreen(new FactionMainScreen(player));
+                    screen.getMinecraft().setScreen(new TeamMainScreen(player));
                 });
         factionButton.setTooltip(Tooltip.create(TOOLTIP_TEAM));
         screen.addRenderableWidget(factionButton);
 
-        //BACK TO MOUNT
+        // BACK TO MOUNT
         RecruitsCommandButton backToMountButton = new RecruitsCommandButton(x + 100, y + 25, TEXT_BACK_TO_MOUNT,
                 button -> {
-                    if (!groups.isEmpty()) {
-                        for (RecruitsGroup group : groups) {
-                            if (!group.isDisabled()) {
-                                Main.SIMPLE_CHANNEL.sendToServer(new MessageBackToMountEntity(player.getUUID(), group.getUUID()));
-                            }
+                    List<Integer> targetIds = screen.getSelectedGroupIds();
+                    if (!targetIds.isEmpty()) {
+                        for (Integer id : targetIds) {
+                            Main.SIMPLE_CHANNEL.sendToServer(new MessageBackToMountEntity(player.getUUID(), id));
                         }
                         screen.sendCommandInChat(91);
                     }
                 });
         backToMountButton.setTooltip(Tooltip.create(TOOLTIP_BACK_TO_MOUNT));
-        backToMountButton.active = isOneGroupActive;
+        backToMountButton.active = isAnyGroupAvailable;
         screen.addRenderableWidget(backToMountButton);
 
-        //DISMOUNT
+        // DISMOUNT
         RecruitsCommandButton dismountButton = new RecruitsCommandButton(x - 100, y + 25, TEXT_DISMOUNT,
                 button -> {
-                    if (!groups.isEmpty()) {
-                        for (RecruitsGroup group : groups) {
-                            if (!group.isDisabled()) {
-                                Main.SIMPLE_CHANNEL.sendToServer(new MessageDismount(player.getUUID(), group.getUUID()));
-                            }
+                    List<Integer> targetIds = screen.getSelectedGroupIds();
+                    if (!targetIds.isEmpty()) {
+                        for (Integer id : targetIds) {
+                            Main.SIMPLE_CHANNEL.sendToServer(new MessageDismount(player.getUUID(), id));
                         }
                         screen.sendCommandInChat(98);
                     }
                 });
         dismountButton.setTooltip(Tooltip.create(TOOLTIP_DISMOUNT));
-        dismountButton.active = isOneGroupActive;
+        dismountButton.active = isAnyGroupAvailable;
         screen.addRenderableWidget(dismountButton);
 
-        //UPKEEP
+        // UPKEEP
         RecruitsCommandButton upkeepButton = new RecruitsCommandButton(x + 100, y, TEXT_UPKEEP,
                 button -> {
-                    if (!groups.isEmpty()) {
-                        for (RecruitsGroup group : groups) {
-                            if (!group.isDisabled() && screen.rayEntity != null) {
-                                Main.SIMPLE_CHANNEL.sendToServer(new MessageUpkeepEntity(player.getUUID(), screen.rayEntity.getUUID(), group.getUUID()));
-                            } else if (!group.isDisabled() && screen.rayBlockPos != null)
-                                Main.SIMPLE_CHANNEL.sendToServer(new MessageUpkeepPos(player.getUUID(), group.getUUID(), screen.rayBlockPos));
+                    List<Integer> targetIds = screen.getSelectedGroupIds();
+                    if (!targetIds.isEmpty()) {
+                        for (Integer id : targetIds) {
+                            if (screen.rayEntity != null) {
+                                Main.SIMPLE_CHANNEL.sendToServer(new MessageUpkeepEntity(player.getUUID(), screen.rayEntity.getUUID(), id));
+                            } else if (screen.rayBlockPos != null) {
+                                Main.SIMPLE_CHANNEL.sendToServer(new MessageUpkeepPos(player.getUUID(), id, screen.rayBlockPos));
+                            }
                         }
                         screen.sendCommandInChat(92);
                     }
                 });
         upkeepButton.setTooltip(Tooltip.create(TOOLTIP_UPKEEP));
-        upkeepButton.active = isOneGroupActive && (isUpkeepPosition(screen.rayBlockPos, player)|| isUpkeepEntity(screen.rayEntity));
+        upkeepButton.active = isAnyGroupAvailable && (isUpkeepPosition(screen.rayBlockPos, player) || isUpkeepEntity(screen.rayEntity));
         screen.addRenderableWidget(upkeepButton);
 
-        //Clear Upkeep
+        // Clear Upkeep
         RecruitsCommandButton clearUpkeepButton = new RecruitsCommandButton(x + 60, y + 50, TEXT_CLEAR_UPKEEP,
                 button -> {
-                    if (!groups.isEmpty()) {
-                        for (RecruitsGroup group : groups) {
-                            if (!group.isDisabled()) {
-                                Main.SIMPLE_CHANNEL.sendToServer(new MessageClearUpkeep(player.getUUID(), group.getUUID()));
-                            }
+                    List<Integer> targetIds = screen.getSelectedGroupIds();
+                    if (!targetIds.isEmpty()) {
+                        for (Integer id : targetIds) {
+                            Main.SIMPLE_CHANNEL.sendToServer(new MessageClearUpkeep(player.getUUID(), id));
                         }
                         screen.sendCommandInChat(93);
                     }
                 });
         clearUpkeepButton.setTooltip(Tooltip.create(TOOLTIP_CLEAR_UPKEEP));
-        clearUpkeepButton.active = isOneGroupActive;
+        clearUpkeepButton.active = isAnyGroupAvailable;
         screen.addRenderableWidget(clearUpkeepButton);
 
-        //REST
+        // REST
         RecruitsCommandButton restButton = new RecruitsCommandButton(x - 100, y, TEXT_REST,
                 button -> {
-                    if (!groups.isEmpty()) {
-                        for (RecruitsGroup group : groups) {
-                            if (!group.isDisabled()) {
-                                Main.SIMPLE_CHANNEL.sendToServer(new MessageRest(player.getUUID(), group.getUUID(), true));
-                            }
+                    List<Integer> targetIds = screen.getSelectedGroupIds();
+                    if (!targetIds.isEmpty()) {
+                        for (Integer id : targetIds) {
+                            Main.SIMPLE_CHANNEL.sendToServer(new MessageRest(player.getUUID(), id, true));
                         }
                         screen.sendCommandInChat(88);
                     }
                 });
         restButton.setTooltip(Tooltip.create(TOOLTIP_REST));
-        restButton.active = isOneGroupActive;
+        restButton.active = isAnyGroupAvailable;
         screen.addRenderableWidget(restButton);
     }
 
-
     private boolean isUpkeepPosition(BlockPos rayBlockPos, Player player) {
         if(rayBlockPos == null) return false;
-
         BlockEntity entity = player.getCommandSenderWorld().getBlockEntity(rayBlockPos);
         BlockState blockState = player.getCommandSenderWorld().getBlockState(rayBlockPos);
-
         return entity instanceof Container || blockState.getBlock() instanceof ChestBlock;
     }
 
     private boolean isUpkeepEntity(Entity rayEntity) {
         if(rayEntity == null) return false;
-
         return rayEntity instanceof Container || rayEntity instanceof InventoryCarrier || rayEntity instanceof AbstractHorse;
     }
 }
-

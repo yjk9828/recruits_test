@@ -15,13 +15,13 @@ import java.util.UUID;
 public class MessageRest implements Message<MessageRest> {
 
     private UUID player;
-    private UUID group;
+    private int group;
     private boolean should;
 
     public MessageRest(){
     }
 
-    public MessageRest(UUID player, UUID group, boolean should) {
+    public MessageRest(UUID player, int group, boolean should) {
         this.player = player;
         this.group = group;
         this.should = should;
@@ -40,14 +40,14 @@ public class MessageRest implements Message<MessageRest> {
     }
     public MessageRest fromBytes(FriendlyByteBuf buf) {
         this.player = buf.readUUID();
-        this.group = buf.readUUID();
+        this.group = buf.readInt();
         this.should = buf.readBoolean();
         return this;
     }
 
     public void toBytes(FriendlyByteBuf buf) {
         buf.writeUUID(this.player);
-        buf.writeUUID(this.group);
+        buf.writeInt(this.group);
         buf.writeBoolean(this.should);
     }
 

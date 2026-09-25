@@ -70,8 +70,7 @@ public class DebugEvents {
                     recruits.addXp(RecruitsServerConfig.RecruitsMaxXpForLevelUp.get()); recruits.checkLevel();
                 }
             }
-            case 23 -> {
-                FactionEvents.removeRecruitFromTeam(recruits, recruits.getTeam(), (ServerLevel) recruits.getCommandSenderWorld());}
+            case 23 -> {TeamEvents.removeRecruitFromTeam(recruits, recruits.getTeam(), (ServerLevel) recruits.getCommandSenderWorld());}
 
             case 24 -> {
                 int current =  recruits.getColor();
@@ -89,10 +88,6 @@ public class DebugEvents {
 
             case 26 -> {
                 recruits.disband(recruits.getOwner(), true, false);
-            }
-
-            case 99 ->{
-                //do nothing
             }
         }
     }

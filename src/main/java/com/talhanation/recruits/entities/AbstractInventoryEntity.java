@@ -1,8 +1,8 @@
 package com.talhanation.recruits.entities;
 
 import com.talhanation.recruits.Main;
-import com.talhanation.recruits.FactionEvents;
-import com.talhanation.recruits.compat.corpse.RecruitCorpseSpawner;
+import com.talhanation.recruits.TeamEvents;
+import com.talhanation.recruits.compat.Corpse;
 import com.talhanation.recruits.config.RecruitsServerConfig;
 import com.talhanation.recruits.inventory.RecruitSimpleContainer;
 import com.talhanation.recruits.pathfinding.AsyncPathfinderMob;
@@ -10,10 +10,12 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.tags.ItemTags;
 import net.minecraft.world.Container;
+import net.minecraft.world.Containers;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.SimpleContainer;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.*;
+import net.minecraft.world.entity.animal.Chicken;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.*;
@@ -230,8 +232,6 @@ public abstract class AbstractInventoryEntity extends AsyncPathfinderMob {
 
     ////////////////////////////////////OTHER FUNCTIONS////////////////////////////////////
 
-    public void onInventoryChanged(){}
-    public void onItemStackAdded(ItemStack itemStack){}
     public void createInventory() {
         SimpleContainer inventory = this.inventory;
         this.inventory = new RecruitSimpleContainer(this.getInventorySize(), this){
@@ -253,16 +253,15 @@ public abstract class AbstractInventoryEntity extends AsyncPathfinderMob {
     public void die(DamageSource dmg) {
         super.die(dmg);
 
-        boolean shouldUseCorpse = Main.isCorpseLoaded && !Main.isRPGZLoaded && !this.getCommandSenderWorld().isClientSide() && RecruitsServerConfig.CompatCorpseMod.get();
-        if (shouldUseCorpse && RecruitCorpseSpawner.spawnCorpse(this)) {
-            return;
+        if(Main.isCorpseLoaded && !Main.isRPGZLoaded && !this.getCommandSenderWorld().isClientSide() && RecruitsServerConfig.CompatCorpseMod.get()){
+            Corpse.spawnCorpse(this);
         }
+        /*else{
+            if(this.getCommandSenderWorld().getGameRules().getBoolean(GameRules.RULE_DOENTITYDROPS))
+                for (int i = 0; i < this.inventory.getContainerSize(); i++)
+                    this.spawnAtLocation(this.inventory.getItem(i));// Containers.dropItemStack(this.getCommandSenderWorld(), getX(), getY(), getZ(), ); 
 
-        if (this.getCommandSenderWorld().getGameRules().getBoolean(GameRules.RULE_DOENTITYDROPS)) {
-            for (int i = 0; i < this.inventory.getContainerSize(); i++) {
-                this.spawnAtLocation(this.inventory.getItem(i));// Containers.dropItemStack(this.getCommandSenderWorld(), getX(), getY(), getZ(), );
-            }
-        }
+        }*/
     }
 
     protected void pickUpItem(ItemEntity itemEntity) {
@@ -313,15 +312,7 @@ public abstract class AbstractInventoryEntity extends AsyncPathfinderMob {
     public boolean hasSameTypeOfItem(ItemStack stack) {
         return this.getInventory().items.stream().anyMatch(itemStack -> itemStack.getDescriptionId().equals(stack.getDescriptionId()));
     }
-    @Nullable
-    public ItemStack getMatchingItem(Predicate<ItemStack> predicate) {
-        for (ItemStack stack : this.getInventory().items) {
-            if (!stack.isEmpty() && predicate.test(stack)) {
-                return stack;
-            }
-        }
-        return null;
-    }
+
     public boolean canEquipItemToSlot(@NotNull ItemStack itemStack, EquipmentSlot slot) {
         if(!itemStack.isEmpty()) {
             ItemStack currentArmor = this.getItemBySlot(slot);
@@ -549,7 +540,7 @@ public abstract class AbstractInventoryEntity extends AsyncPathfinderMob {
         int amount = 0;
         for(int i = 0; i < container.getContainerSize(); i++) {
             ItemStack itemStack = container.getItem(i);
-            if(itemStack.is(FactionEvents.getCurrency().getItem())){
+            if(itemStack.is(TeamEvents.getCurrency().getItem())){
                 amount += itemStack.getCount();
             }
         }
@@ -561,7 +552,7 @@ public abstract class AbstractInventoryEntity extends AsyncPathfinderMob {
         ItemStack currency = null;
         for(int i = 0; i < inv.getContainerSize(); i++){
             ItemStack itemStack = inv.getItem(i);
-            if(itemStack.is(FactionEvents.getCurrency().getItem())){
+            if(itemStack.is(TeamEvents.getCurrency().getItem())){
                 currency = itemStack;
                 break;
             }
@@ -586,40 +577,5 @@ public abstract class AbstractInventoryEntity extends AsyncPathfinderMob {
 
     public int getBeforeItemSlot(){
         return beforeItemSlot;
-    }
-
-    public void switchMainHandItem(Predicate<ItemStack> predicate) {
-        if (!this.isAlive() || predicate == null) return;
-
-        SimpleContainer inventory = this.getInventory();
-        ItemStack mainHand = this.getMainHandItem();
-        if (predicate.test(mainHand)) return;
-
-        for (int i = 6; i < inventory.getContainerSize(); i++) {
-            ItemStack stack = inventory.getItem(i);
-            if (predicate.test(stack)) {
-
-                inventory.setItem(i, mainHand);
-                this.setItemInHand(InteractionHand.MAIN_HAND, stack);
-                return;
-            }
-        }
-    }
-    public void switchOffHandItem(Predicate<ItemStack> predicate) {
-        if (!this.isAlive() || predicate == null) return;
-
-        SimpleContainer inventory = this.getInventory();
-        ItemStack offHand = this.getOffhandItem();
-        if (predicate.test(offHand)) return;
-
-        for (int i = 6; i < inventory.getContainerSize(); i++) {
-            ItemStack stack = inventory.getItem(i);
-            if (predicate.test(stack)) {
-
-                inventory.setItem(i, offHand);
-                this.setItemInHand(InteractionHand.OFF_HAND, stack);
-                return;
-            }
-        }
     }
 }

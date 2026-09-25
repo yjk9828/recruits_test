@@ -1,10 +1,9 @@
 package com.talhanation.recruits.client.gui.diplomacy;
 
 import com.google.common.collect.Lists;
-import com.talhanation.recruits.client.ClientManager;
 import com.talhanation.recruits.client.gui.widgets.ListScreenListBase;
 import com.talhanation.recruits.world.RecruitsDiplomacyManager;
-import com.talhanation.recruits.world.RecruitsFaction;
+import com.talhanation.recruits.world.RecruitsTeam;
 
 import java.util.*;
 
@@ -13,6 +12,9 @@ public class DiplomacyTeamList extends ListScreenListBase<DiplomacyTeamEntry> {
     protected DiplomacyTeamListScreen screen;
     protected final List<DiplomacyTeamEntry> entries;
     protected String filter;
+    public static List<RecruitsTeam> teams;
+    public static Map<String, Map<String, RecruitsDiplomacyManager.DiplomacyStatus>> diplomacyMap;
+    public RecruitsTeam ownTeam;
     public DiplomacyFilter diplomacyFilter;
 
     public DiplomacyTeamList(int width, int height, int x, int y, int size, DiplomacyTeamListScreen screen) {
@@ -27,18 +29,33 @@ public class DiplomacyTeamList extends ListScreenListBase<DiplomacyTeamEntry> {
         setRenderSelection(true);
     }
 
+    public boolean hasUpdated;
+
     public void tick() {
-        if (ClientManager.factions != null && ClientManager.diplomacyMap != null) {
+        if (!hasUpdated && teams != null && diplomacyMap != null) {
+            this.ownTeam = getOwnTeam(teams);
+            screen.ownTeam = this.ownTeam;
             updateEntryList();
+            hasUpdated = true;
         }
+    }
+
+    private RecruitsTeam getOwnTeam(List<RecruitsTeam> list) {
+        String playerTeam = minecraft.player.getTeam().getName();
+        for (RecruitsTeam team : list) {
+            if (team.getStringID().equals(playerTeam)) {
+                return team;
+            }
+        }
+        return null;
     }
 
     public void updateEntryList() {
         entries.clear();
 
-        for (RecruitsFaction team : ClientManager.factions) {
-            if (ClientManager.ownFaction != null && !team.getStringID().equals(ClientManager.ownFaction.getStringID())) {
-                RecruitsDiplomacyManager.DiplomacyStatus status = ClientManager.getRelation(ClientManager.ownFaction.getStringID(), team.getStringID());
+        for (RecruitsTeam team : teams) {
+            if (ownTeam != null && !team.equals(ownTeam)) {
+                RecruitsDiplomacyManager.DiplomacyStatus status = getRelation(ownTeam.getStringID(), team.getStringID());
 
                 switch (diplomacyFilter) {
                     case ALL -> {
@@ -64,6 +81,10 @@ public class DiplomacyTeamList extends ListScreenListBase<DiplomacyTeamEntry> {
         }
 
         updateFilter();
+    }
+
+    public RecruitsDiplomacyManager.DiplomacyStatus getRelation(String team, String otherTeam) {
+        return diplomacyMap.getOrDefault(team, new HashMap<>()).getOrDefault(otherTeam, RecruitsDiplomacyManager.DiplomacyStatus.NEUTRAL);
     }
 
     public void updateFilter() {

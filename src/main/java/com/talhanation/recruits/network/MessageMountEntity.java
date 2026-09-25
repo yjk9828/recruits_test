@@ -1,8 +1,6 @@
 package com.talhanation.recruits.network;
 
 import com.talhanation.recruits.CommandEvents;
-import com.talhanation.recruits.compat.siegeweapons.SiegeWeapon;
-import com.talhanation.recruits.compat.smallships.SmallShips;
 import com.talhanation.recruits.config.RecruitsServerConfig;
 import com.talhanation.recruits.entities.AbstractRecruitEntity;
 import de.maxhenkel.corelib.net.Message;
@@ -20,12 +18,12 @@ public class MessageMountEntity implements Message<MessageMountEntity> {
 
     private UUID uuid;
     private UUID target;
-    private UUID group;
+    private int group;
 
     public MessageMountEntity() {
     }
 
-    public MessageMountEntity(UUID uuid, UUID target, UUID group) {
+    public MessageMountEntity(UUID uuid, UUID target, int group) {
         this.uuid = uuid;
         this.target = target;
         this.group = group;
@@ -41,8 +39,6 @@ public class MessageMountEntity implements Message<MessageMountEntity> {
                 Entity.class,
                 player.getBoundingBox().inflate(100),
                 (mount) -> mount.getUUID().equals(target) && RecruitsServerConfig.MountWhiteList.get().contains(mount.getEncodeId())
-                        || SmallShips.isSmallShip(mount)
-                        || SiegeWeapon.isSiegeWeapon(mount)
         );
         if (entityList.isEmpty()) return;
 
@@ -56,13 +52,13 @@ public class MessageMountEntity implements Message<MessageMountEntity> {
     public MessageMountEntity fromBytes(FriendlyByteBuf buf) {
         this.uuid = buf.readUUID();
         this.target = buf.readUUID();
-        this.group = buf.readUUID();
+        this.group = buf.readInt();
         return this;
     }
 
     public void toBytes(FriendlyByteBuf buf) {
         buf.writeUUID(uuid);
         buf.writeUUID(target);
-        buf.writeUUID(group);
+        buf.writeInt(group);
     }
 }

@@ -36,7 +36,7 @@ mixin{
     overwriteErrorLevel = 'error'
 }
 
-version = '1.15.2'
+version = '1.13.4C'
 
 group = 'com.talhanation.recruits'
 archivesBaseName = 'recruits-1.20.1'
@@ -49,6 +49,7 @@ minecraft {
 
     runs {
         client {
+
             workingDirectory project.file('run')
 
             property 'forge.logging.markers', 'REGISTRIES'
@@ -103,41 +104,57 @@ minecraft {
 sourceSets.main.resources { srcDir 'src/generated/resources' }
 
 repositories {
+    // [추가됨] lib 폴더를 저장소로 인식시킴
+    flatDir {
+        dirs 'lib'
+    }
+
     maven {
         name = "henkelmax.public"
         url = 'https://maven.maxhenkel.de/repository/public'
     }
     mavenLocal()
     maven {
-
         url "https://www.cursemaven.com"
     }
 }
 
 dependencies {
 
-    minecraft 'net.minecraftforge:forge:1.20.1-47.4.10'
-    shadow fg.deobf("de.maxhenkel.corelib:corelib:1.20.1-1.1.3:api")
-    runtimeOnly fg.deobf("de.maxhenkel.corelib:corelib:1.20.1-1.1.3")
-    runtimeOnly fg.deobf("de.maxhenkel.corelib:corelib:1.20.1-1.1.3:javadoc")
+	implementation fg.deobf("curse.maven:carry-on-274259:4882500")
+    minecraft 'net.minecraftforge:forge:1.20.1-47.3.0'
+    shadow fg.deobf("de.maxhenkel.corelib:corelib:1.20.1-1.0.0:api")
+    runtimeOnly fg.deobf("de.maxhenkel.corelib:corelib:1.20.1-1.0.0")
+    runtimeOnly fg.deobf("de.maxhenkel.corelib:corelib:1.20.1-1.0.0:javadoc")
     //Implementation
 
     annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
 
     implementation fg.deobf("curse.maven:corpse-316582:5157034")
-
+    
     implementation fg.deobf("curse.maven:epic-knights-armor-and-weapons-509041:5254836")
-    implementation fg.deobf("curse.maven:architectury-api-419699:5137938")
+	implementation fg.deobf("curse.maven:mekanism-268560:6552911")
+	implementation fg.deobf("curse.maven:spartan-shields-252239:5440763")
+  
+    // [변경됨] 기존 외부 의존성은 주석 처리합니다.
+    // implementation fg.deobf("curse.maven:architectury-api-419699:5137938") 
+    // 참고: architectury-api는 small-ships의 의존성일 수 있으니, 만약 로컬 jar에 포함(shadow)되지 않았다면 유지해야 할 수도 있습니다. 
+    // 질문하신 small-ships 부분은 아래와 같습니다:
+
+    // [변경됨] 기존 Small Ships CurseMaven 의존성 주석 처리
+    // implementation fg.deobf("curse.maven:small-ships-450659:5566900") 
+
+    // [추가됨] 로컬 lib 폴더의 파일 직접 참조
+    // 'fg.deobf'로 감싸주어야 ForgeGradle이 모드로 올바르게 인식하고 매핑을 처리합니다.
+    implementation fg.deobf(files('lib/smallships-2.0.0-b1.4-dev-shadow.jar'))
+	implementation fg.deobf(files('lib/JustEnoughGuns-0.11.1-1.20.1-deobf.jar'))
+	implementation fg.deobf(files('lib/mekanism_turrets-1.2.2_debug-dev.jar'))
     implementation fg.deobf("curse.maven:cloth-config-348521:4973441")
 
     implementation fg.deobf("curse.maven:ewewukeks-musket-mod-354562:5779561")
     implementation fg.deobf("curse.maven:worldedit-225608:4586218")
-    implementation fg.deobf("curse.maven:small-ships-450659:5566900")
-    implementation fg.deobf("curse.maven:siegeweapons-1259343:7906096")
-    //implementation fg.deobf("curse.maven:in-game-account-switcher-232676:5457030")
-    //implementation fg.deobf("curse.maven:geckolib-388172:6027567")
-    //implementation fg.deobf("curse.maven:born-in-chaos-686437:6193155")
-    //implementation fg.deobf("curse.maven:rpgz-404828:5549878")
+    
+    // ... 나머지 의존성
 }
 
 // Example for how to get properties into the manifest for reading at runtime.
@@ -160,4 +177,38 @@ shadowJar {
 
 reobf {
     shadowJar {}
+}
+
+// build.gradle 파일 맨 아래에 추가
+tasks.withType(JavaCompile) {
+    options.encoding = 'UTF-8'
+}
+
+// build.gradle 맨 아래에 추가
+
+// 1. 소스코드(주석 포함)가 들어있는 jar 만들기
+task sourcesJar(type: Jar) {
+    archiveClassifier.set('sources')
+    from sourceSets.main.allJava
+}
+
+// 2. 암호화되지 않은(Deobfuscated) 실행 파일 만들기
+task devJar(type: Jar) {
+    archiveClassifier.set('dev')
+    from sourceSets.main.output
+    // 필요하다면 manifest 설정 복사
+    manifest {
+        attributes([
+            "Specification-Title": mod_id,
+            "Implementation-Title": project.name,
+            "Implementation-Version": project.jar.archiveVersion,
+            "Implementation-Timestamp": new Date().format("yyyy-MM-dd'T'HH:mm:ssZ")
+        ])
+    }
+}
+
+// 빌드할 때 위 파일들도 같이 만들어지도록 설정
+artifacts {
+    archives sourcesJar
+    archives devJar
 }

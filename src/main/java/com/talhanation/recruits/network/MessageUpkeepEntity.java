@@ -17,12 +17,12 @@ public class MessageUpkeepEntity implements Message<MessageUpkeepEntity> {
 
     private UUID player_uuid;
     private UUID target;
-    private UUID group;
+    private int group;
 
     public MessageUpkeepEntity() {
     }
 
-    public MessageUpkeepEntity(UUID player_uuid, UUID target, UUID group) {
+    public MessageUpkeepEntity(UUID player_uuid, UUID target, int group) {
         this.player_uuid = player_uuid;
         this.target = target;
         this.group = group;
@@ -43,13 +43,13 @@ public class MessageUpkeepEntity implements Message<MessageUpkeepEntity> {
     public MessageUpkeepEntity fromBytes(FriendlyByteBuf buf) {
         this.player_uuid = buf.readUUID();
         this.target = buf.readUUID();
-        this.group = buf.readUUID();
+        this.group = buf.readInt();
         return this;
     }
 
     public void toBytes(FriendlyByteBuf buf) {
         buf.writeUUID(player_uuid);
         buf.writeUUID(target);
-        buf.writeUUID(group);
+        buf.writeInt(group);
     }
 }

@@ -1,18 +1,12 @@
 package com.talhanation.recruits;
 
-import com.talhanation.recruits.client.ClientManager;
 import com.talhanation.recruits.config.RecruitsServerConfig;
 import com.talhanation.recruits.entities.*;
-import com.talhanation.recruits.entities.ai.villager.VillagerBecomeNobleGoal;
 import com.talhanation.recruits.init.ModBlocks;
 import com.talhanation.recruits.init.ModEntityTypes;
 import com.talhanation.recruits.init.ModProfessions;
-import com.talhanation.recruits.world.RecruitsGroup;
-import com.talhanation.recruits.world.RecruitsHireTradesRegistry;
 import com.talhanation.recruits.world.RecruitsPatrolSpawn;
-import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.GlobalPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.RandomSource;
@@ -22,21 +16,17 @@ import net.minecraft.world.entity.animal.IronGolem;
 import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.entity.npc.VillagerProfession;
 import net.minecraft.world.entity.npc.VillagerTrades;
-import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.trading.MerchantOffer;
 import net.minecraft.world.level.ItemLike;
-import net.minecraft.world.level.Level;
-import net.minecraft.world.scores.Team;
-import net.minecraftforge.event.entity.EntityJoinLevelEvent;
 import net.minecraftforge.event.entity.living.LivingEvent;
-import net.minecraftforge.event.entity.player.PlayerInteractEvent;
-import net.minecraftforge.event.server.ServerStartingEvent;
 import net.minecraftforge.event.village.VillagerTradesEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
-
+import net.minecraft.world.scores.Scoreboard;
+import net.minecraft.world.scores.Team;
+import net.minecraft.world.scores.PlayerTeam;
 
 import java.util.*;
 
@@ -59,40 +49,19 @@ public class VillagerEvents {
             }
         }
     }
-    @SubscribeEvent
-    public void onServerStarting(ServerStartingEvent event) {
-        RecruitsHireTradesRegistry.registerTrades();
-    }
-    @SubscribeEvent
-    public void onPlayerJoiningServer(EntityJoinLevelEvent event){
-        if(event.getLevel().isClientSide() && event.getEntity() instanceof Player player){
-            if(Minecraft.getInstance().player.getUUID().equals(player.getUUID())){
-                RecruitsHireTradesRegistry.registerTrades();
-            }
-        }
-    }
-    @SubscribeEvent
-    public void onVillagerJoinWorld(EntityJoinLevelEvent event) {
-        Entity entity = event.getEntity();
-        if(!RecruitsServerConfig.NobleVillagerSpawn.get()) return;
-
-        if (entity instanceof Villager villager) {
-            villager.goalSelector.addGoal(0, new VillagerBecomeNobleGoal(villager));
-        }
-    }
-
-    public HashMap<VillagerProfession, EntityType<? extends  AbstractRecruitEntity>> entitiesByProfession = new HashMap<>(){{
-        put(ModProfessions.RECRUIT.get(), ModEntityTypes.RECRUIT.get());
-        put(ModProfessions.BOWMAN.get(), ModEntityTypes.BOWMAN.get());
-        put(ModProfessions.SHIELDMAN.get(), ModEntityTypes.RECRUIT_SHIELDMAN.get());
-        put(ModProfessions.HORSEMAN.get(), ModEntityTypes.HORSEMAN.get());
-        put(ModProfessions.NOMAD.get(), ModEntityTypes.NOMAD.get());
-        put(ModProfessions.CROSSBOWMAN.get(), ModEntityTypes.CROSSBOWMAN.get());
-    }
-    };
 
     @SubscribeEvent
     public void onVillagerLivingUpdate(LivingEvent.LivingTickEvent event) {
+        HashMap<VillagerProfession, EntityType<? extends  AbstractRecruitEntity>> entitiesByProfession = new HashMap<>(){{
+            put(ModProfessions.RECRUIT.get(), ModEntityTypes.RECRUIT.get());
+            put(ModProfessions.BOWMAN.get(), ModEntityTypes.BOWMAN.get());
+            put(ModProfessions.SHIELDMAN.get(), ModEntityTypes.RECRUIT_SHIELDMAN.get());
+            put(ModProfessions.HORSEMAN.get(), ModEntityTypes.HORSEMAN.get());
+            put(ModProfessions.NOMAD.get(), ModEntityTypes.NOMAD.get());
+            put(ModProfessions.CROSSBOWMAN.get(), ModEntityTypes.CROSSBOWMAN.get());
+            }
+        };
+
         Entity entity = event.getEntity();
         if (entity instanceof Villager villager) {
             VillagerProfession profession = villager.getVillagerData().getProfession();
@@ -103,6 +72,7 @@ public class VillagerEvents {
             }
         }
 
+
         if (entity instanceof IronGolem ironGolemEntity) {
 
             if (!ironGolemEntity.isPlayerCreated() && RecruitsServerConfig.OverrideIronGolemSpawn.get()){
@@ -110,192 +80,54 @@ public class VillagerEvents {
                         AbstractRecruitEntity.class,
                         ironGolemEntity.getBoundingBox().inflate(32)
                 );
-                list1.removeIf(recruit -> recruit instanceof VillagerNobleEntity);
-
                 if (list1.size() > 1) {
                     ironGolemEntity.remove(Entity.RemovalReason.KILLED);
+                    //System.out.println(olem was removed");
                 }
                 else {
-                    int i = this.random.nextInt(6);
+                    int i = this.random.nextInt(5);
                     if (i == 1) createBowmanIronGolem(ironGolemEntity);
-                    if (i == 2) createCrossbowmanIronGolem(ironGolemEntity);
                     else if (i == 0) createRecruitShieldmanIronGolem(ironGolemEntity);
                     else createRecruitIronGolem(ironGolemEntity);
+                    //System.out.println("Spawned new Recruit");
                 }
             }
         }
     }
+	private static void createRecruit(Villager villager, EntityType<? extends AbstractRecruitEntity> recruitType){
+			AbstractRecruitEntity abstractRecruit = recruitType.create(villager.getCommandSenderWorld());
+			if (abstractRecruit != null) {
+				abstractRecruit.copyPosition(villager);
 
-    @SubscribeEvent
-    public void onPlayerInteractEntity(PlayerInteractEvent.EntityInteract event) {
-        Player player = event.getEntity();
-        Entity target = event.getTarget();
+				abstractRecruit.initSpawn();
 
-        if(player == null || target == null) return;
+				// === 여기부터 수정된 부분 ===
+				Team villagerTeam = villager.getTeam();
+				
+				// 안전하게 형변환이 가능한지 확인(instanceof) 후 실행
+				if (villagerTeam instanceof PlayerTeam) {
+					Scoreboard scoreboard = villager.getCommandSenderWorld().getScoreboard();
+					scoreboard.addPlayerToTeam(abstractRecruit.getScoreboardName(), (PlayerTeam) villagerTeam);
+				}
+				// === 여기까지 ===
 
-        Team targetTeam = target.getTeam();
-        String teamID = null;
+				for(ItemStack itemStack : villager.getInventory().items){
+					abstractRecruit.getInventory().addItem(itemStack);
+				}
 
-        if (target instanceof ICanTradeEmbargo ihe) {
-            teamID = ihe.getEmbargoTeamID();
-        }
-        else if (target instanceof Villager && targetTeam != null) {
-            teamID = targetTeam.getName();
-        }
+				Component name = villager.getCustomName();
+				if(name  != null) abstractRecruit.setCustomName(name);
 
-        if (teamID == null || teamID.isEmpty()) return;
-
-        if (event.getLevel().isClientSide()) {
-
-            String embargoed = ClientManager.embargoMap.getOrDefault(player.getUUID(), "");
-
-            if (embargoed.contains(teamID)) {
-                event.setCanceled(true);
-            }
-        }
-        else {
-            // Server-side: gegen die authoritative Map prüfen
-            if (FactionEvents.recruitsDiplomacyManager.hasEmbargo(player.getUUID(), teamID)) {
-                event.setCanceled(true);
-                player.sendSystemMessage(
-                        Component.translatable("chat.recruits.text.embargoBlocked", target.getName().getString())
-                );
-            }
-        }
-    }
-
-    private static void createRecruit(Villager villager, EntityType<? extends AbstractRecruitEntity> recruitType){
-        AbstractRecruitEntity abstractRecruit = recruitType.create(villager.getCommandSenderWorld());
-        if (abstractRecruit != null) {
-            abstractRecruit.copyPosition(villager);
-
-            abstractRecruit.initSpawn();
-            AbstractRecruitEntity.applyVariantFromVillager(abstractRecruit, villager);
-
-            for(ItemStack itemStack : villager.getInventory().items){
-                abstractRecruit.getInventory().addItem(itemStack);
-            }
-
-            if(abstractRecruit instanceof ICompanion){
-                for(int i = 0; i < 4; i++){
-                    abstractRecruit.addXp(RecruitsServerConfig.RecruitsMaxXpForLevelUp.get()); abstractRecruit.checkLevel();
-                }
-            }
-
-            villager.getCommandSenderWorld().addFreshEntity(abstractRecruit);
-            Component name = villager.getCustomName();
-            if(name  != null) abstractRecruit.setCustomName(name);
-
-            if(RecruitsServerConfig.RecruitTablesPOIReleasing.get()) villager.releasePoi(MemoryModuleType.JOB_SITE);
-            villager.releasePoi(MemoryModuleType.HOME);
-            villager.releasePoi(MemoryModuleType.MEETING_POINT);
-            villager.discard();
-        }
-    }
-
-    public static void createNobleVillager(Villager villager){
-        Level level = villager.getCommandSenderWorld();
-        VillagerNobleEntity nobleEntity = ModEntityTypes.VILLAGER_NOBLE.get().create(level);
-
-        if (nobleEntity != null && !level.isClientSide()){
-            nobleEntity.copyPosition(villager);
-
-            nobleEntity.initSpawn();
-            AbstractRecruitEntity.applyVariantFromVillager(nobleEntity, villager);
-            nobleEntity.setFollowState(0);
-
-            for(ItemStack itemStack : villager.getInventory().items){
-                nobleEntity.getInventory().addItem(itemStack);
-            }
-
-            Component name = villager.getCustomName();
-            if(name  != null) nobleEntity.setCustomName(name);
-
-            Optional<GlobalPos> homeMemory = villager.getBrain().getMemory(MemoryModuleType.HOME);
-
-            if(homeMemory.isPresent()){
-                nobleEntity.setSleepingPos(homeMemory.get().pos());
-                nobleEntity.setShouldRest(true);
-            }
-
-            Optional<GlobalPos> meetingMemory = villager.getBrain().getMemory(MemoryModuleType.MEETING_POINT);
-            if(meetingMemory.isPresent()){
-                nobleEntity.setHoldPos(meetingMemory.get().pos().getCenter());
-
-            }
-
-            villager.getCommandSenderWorld().addFreshEntity(nobleEntity);
-            if(RecruitsServerConfig.RecruitTablesPOIReleasing.get()) villager.releasePoi(MemoryModuleType.JOB_SITE);
-            villager.releasePoi(MemoryModuleType.HOME);
-            villager.releasePoi(MemoryModuleType.MEETING_POINT);
-            villager.discard();
-        }
-    }
-
-    public static void createHiredRecruitFromVillager(ServerLevel serverLevel, Villager villager, EntityType<? extends AbstractRecruitEntity> recruitType, Player player, RecruitsGroup group){
-        AbstractRecruitEntity abstractRecruit = recruitType.create(villager.getCommandSenderWorld());
-        if(abstractRecruit == null) return;
-
-        abstractRecruit.initSpawn();
-        AbstractRecruitEntity.applyVariantFromVillager(abstractRecruit, villager);
-
-        Component name = villager.getCustomName();
-
-        if(name != null && !name.getString().isEmpty()) abstractRecruit.setCustomName(name);
-
-        if (CommandEvents.handleRecruiting(player, group, abstractRecruit, false)) {
-            abstractRecruit.copyPosition(villager);
-
-            abstractRecruit.setFollowState(1);
-
-            for(ItemStack itemStack : villager.getInventory().items){
-                abstractRecruit.getInventory().addItem(itemStack);
-            }
-
-            abstractRecruit.setGroupUUID(group.getUUID());
-
-            villager.getCommandSenderWorld().addFreshEntity(abstractRecruit);
-
-            if(abstractRecruit instanceof ICompanion companion){
-                for(int i = 0; i < 4; i++){
-                    abstractRecruit.addXp(RecruitsServerConfig.RecruitsMaxXpForLevelUp.get()); abstractRecruit.checkLevel();
-                }
-                companion.applyRecruitValues(abstractRecruit);
-            }
-
-            if(RecruitsServerConfig.RecruitTablesPOIReleasing.get()) villager.releasePoi(MemoryModuleType.JOB_SITE);
-            villager.releasePoi(MemoryModuleType.HOME);
-            villager.releasePoi(MemoryModuleType.MEETING_POINT);
-            villager.discard();
-        }
-    }
-
-    public static void spawnHiredRecruit(ServerLevel serverLevel, EntityType<? extends AbstractRecruitEntity> recruitType, Player player, RecruitsGroup group){
-        AbstractRecruitEntity abstractRecruit = recruitType.create(player.getCommandSenderWorld());
-        if(abstractRecruit == null) return;
-
-        abstractRecruit.initSpawn();
-
-        if (CommandEvents.handleRecruiting(player, group, abstractRecruit, false)) {
-            abstractRecruit.copyPosition(player);
-
-            abstractRecruit.setFollowState(1);
-            abstractRecruit.setGroupUUID(group.getUUID());
-
-            player.getCommandSenderWorld().addFreshEntity(abstractRecruit);
-
-            if(abstractRecruit instanceof ICompanion companion){
-                for(int i = 0; i < 4; i++){
-                    abstractRecruit.addXp(RecruitsServerConfig.RecruitsMaxXpForLevelUp.get()); abstractRecruit.checkLevel();
-                }
-                companion.applyRecruitValues(abstractRecruit);
-            }
-        }
-    }
+				villager.getCommandSenderWorld().addFreshEntity(abstractRecruit);
+				if(RecruitsServerConfig.RecruitTablesPOIReleasing.get()) villager.releasePoi(MemoryModuleType.JOB_SITE);
+				villager.releasePoi(MemoryModuleType.HOME);
+				villager.releasePoi(MemoryModuleType.MEETING_POINT);
+				villager.discard();
+			}
+	}
 
     @SubscribeEvent
     public void villagerTrades(VillagerTradesEvent event) {
-        if(!RecruitsServerConfig.ShouldProfessionBlocksTrade.get()) return;
 
         if (event.getType() == VillagerProfession.ARMORER) {
             Trade block_trade = new Trade(Items.EMERALD, 15, ModBlocks.RECRUIT_SHIELD_BLOCK.get(), 1, 2, 20);
@@ -374,18 +206,6 @@ public class VillagerEvents {
         bowman.getInventory().setItem(8, Items.BREAD.getDefaultInstance());
         villager.remove(Entity.RemovalReason.DISCARDED);
         villager.getCommandSenderWorld().addFreshEntity(bowman);
-    }
-
-    private static void createCrossbowmanIronGolem(LivingEntity entity){
-        CrossBowmanEntity crossBowmanEntity = ModEntityTypes.CROSSBOWMAN.get().create(entity.getCommandSenderWorld());
-        IronGolem villager = (IronGolem) entity;
-        crossBowmanEntity.copyPosition(villager);
-
-        crossBowmanEntity.initSpawn();
-
-        crossBowmanEntity.getInventory().setItem(8, Items.BREAD.getDefaultInstance());
-        villager.remove(Entity.RemovalReason.DISCARDED);
-        villager.getCommandSenderWorld().addFreshEntity(crossBowmanEntity);
     }
 
     private static void spawnSmallGuardRecruits(BlockPos upPos, ServerLevel world, Random random) {

@@ -10,16 +10,18 @@ import net.minecraftforge.network.NetworkEvent;
 import java.util.Objects;
 import java.util.UUID;
 
+
 public class MessagePatrolLeaderSetPatrollingSpeed implements Message<MessagePatrolLeaderSetPatrollingSpeed> {
 
     private UUID recruit;
-    private byte speed; // 0 = SLOW, 1 = NORMAL, 2 = FAST
+    private boolean fast;
 
-    public MessagePatrolLeaderSetPatrollingSpeed() {}
+    public MessagePatrolLeaderSetPatrollingSpeed() {
+    }
 
-    public MessagePatrolLeaderSetPatrollingSpeed(UUID recruit, byte speed) {
+    public MessagePatrolLeaderSetPatrollingSpeed(UUID recruit, boolean fast) {
         this.recruit = recruit;
-        this.speed = speed;
+        this.fast = fast;
     }
 
     public Dist getExecutingSide() {
@@ -31,18 +33,18 @@ public class MessagePatrolLeaderSetPatrollingSpeed implements Message<MessagePat
         player.getCommandSenderWorld().getEntitiesOfClass(
                 AbstractLeaderEntity.class,
                 context.getSender().getBoundingBox().inflate(100.0D),
-                recruit -> recruit.getUUID().equals(this.recruit)
-        ).forEach(leader -> leader.setPatrolSpeed(this.speed));
+                (recruit) -> recruit.getUUID().equals(this.recruit)
+        ).forEach((leader) -> leader.setFastPatrolling(this.fast));
     }
 
     public MessagePatrolLeaderSetPatrollingSpeed fromBytes(FriendlyByteBuf buf) {
         this.recruit = buf.readUUID();
-        this.speed = buf.readByte();
+        this.fast = buf.readBoolean();
         return this;
     }
 
     public void toBytes(FriendlyByteBuf buf) {
         buf.writeUUID(this.recruit);
-        buf.writeByte(this.speed);
+        buf.writeBoolean(this.fast);
     }
 }

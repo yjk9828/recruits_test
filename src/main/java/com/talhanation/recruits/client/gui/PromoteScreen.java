@@ -2,6 +2,7 @@ package com.talhanation.recruits.client.gui;
 
 import com.talhanation.recruits.Main;
 import com.talhanation.recruits.entities.AbstractRecruitEntity;
+import com.talhanation.recruits.entities.CrossBowmanEntity;
 import com.talhanation.recruits.inventory.PromoteContainer;
 import com.talhanation.recruits.network.*;
 import de.maxhenkel.corelib.inventory.ScreenBase;
@@ -13,14 +14,10 @@ import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
-
 import net.minecraftforge.client.gui.widget.ExtendedButton;
-
 import org.lwjgl.glfw.GLFW;
 
-
 public class PromoteScreen extends ScreenBase<PromoteContainer> {
-
 
     private static final ResourceLocation RESOURCE_LOCATION = new ResourceLocation(Main.MOD_ID, "textures/gui/professions/professions_main_gui.png");
     private final Player player;
@@ -54,10 +51,10 @@ public class PromoteScreen extends ScreenBase<PromoteContainer> {
 
     private static final MutableComponent BUTTON_ROGUE = Component.translatable("gui.recruits.inv.text.rogue");
     private static final MutableComponent TOOLTIP_ROGUE = Component.translatable("gui.recruits.inv.tooltip.rogue");
-    private static final MutableComponent TOOLTIP_SIEGE_ENGINEER_DISABLED = Component.translatable("gui.recruits.inv.tooltip.siege_engineer_disabled");
 
-    //private boolean keepTeam;
-
+    // 강등(재훈련) 버튼 텍스트
+    private static final MutableComponent BUTTON_DEMOTE = Component.literal("Retrain: Crossbow");
+    private static final MutableComponent TOOLTIP_DEMOTE = Component.literal("Revert to Crossbowman.\nKeeps Level & XP.");
 
     public PromoteScreen(PromoteContainer container, Inventory playerInventory, Component title) {
         super(RESOURCE_LOCATION, container, playerInventory, Component.literal(""));
@@ -65,7 +62,6 @@ public class PromoteScreen extends ScreenBase<PromoteContainer> {
         this.imageHeight = 250;
         this.player = container.getPlayerEntity();
         this.recruit = container.getRecruit();
-
     }
 
     @Override
@@ -73,7 +69,6 @@ public class PromoteScreen extends ScreenBase<PromoteContainer> {
         super.init();
         this.leftPos = (this.width - this.imageWidth) / 2;
         this.topPos = (this.height - this.imageHeight) / 2;
-        //keepTeam = false;
 
         setWidgets();
     }
@@ -103,28 +98,41 @@ public class PromoteScreen extends ScreenBase<PromoteContainer> {
     @Override
     public boolean mouseClicked(double p_97748_, double p_97749_, int p_97750_) {
         textField.setFocused(true);
-
         return super.mouseClicked(p_97748_, p_97749_, p_97750_);
-
     }
 
     private void setWidgets() {
         clearWidgets();
         setEditBox();
-        createProfessionButtons(BUTTON_MESSENGER, TOOLTIP_MESSENGER, 0, recruit.getXpLevel() >= 2);
-        createProfessionButtons(BUTTON_SCOUT, TOOLTIP_SCOUT, 1, recruit.getXpLevel() >= 2);
-        createProfessionButtons(BUTTON_SIEGE_ENGINEER, Main.isSiegeWeaponsCompatible ? TOOLTIP_SIEGE_ENGINEER : TOOLTIP_SIEGE_ENGINEER_DISABLED, 2,  recruit.getXpLevel() >= 3 && Main.isSiegeWeaponsLoaded && Main.isSiegeWeaponsCompatible);
-        createProfessionButtons(BUTTON_CAPTAIN, Main.isSmallShipsCompatible ? TOOLTIP_CAPTAIN : TOOLTIP_CAPTAIN_DISABLED, 3, recruit.getXpLevel() >= 5 && Main.isSmallShipsLoaded && Main.isSmallShipsCompatible);
-        createProfessionButtons(BUTTON_PATROL_LEADER, TOOLTIP_PATROL_LEADER, 4,recruit.getXpLevel() >= 5);
-        createProfessionButtons(BUTTON_ASSASSIN, TOOLTIP_ASSASSIN, 5, false && recruit.getXpLevel() >= 5);
 
-        createProfessionButtons(BUTTON_GOVERNOR, TOOLTIP_GOVERNOR, 6, false && recruit.getXpLevel() >= 7);
-        createProfessionButtons(BUTTON_SPY, TOOLTIP_SPY, 7, false && recruit.getXpLevel() >= 7);
-        createProfessionButtons(BUTTON_ROGUE, TOOLTIP_ROGUE, 8, false && recruit.getXpLevel() >= 7);
+        // 1. 강등 버튼 로직
+        // Crossbowman이 아니라면 강등 버튼 표시
+        // **중요**: 9번 위치는 화면 밖이므로 4번(Assassin 자리)을 사용합니다.
+        if (!(recruit instanceof CrossBowmanEntity)) {
+            createProfessionButtons(BUTTON_DEMOTE, TOOLTIP_DEMOTE, -1, true, 4);
+        }
+
+        // 2. 진급 버튼들
+        createProfessionButtons(BUTTON_MESSENGER, TOOLTIP_MESSENGER, 0, recruit.getXpLevel() >= 3, 0);
+        createProfessionButtons(BUTTON_SCOUT, TOOLTIP_SCOUT, 1, recruit.getXpLevel() >= 6, 1);
+        createProfessionButtons(BUTTON_PATROL_LEADER, TOOLTIP_PATROL_LEADER, 2, recruit.getXpLevel() >= 15, 2);
+        createProfessionButtons(BUTTON_CAPTAIN, Main.isSmallShipsCompatible ? TOOLTIP_CAPTAIN : TOOLTIP_CAPTAIN_DISABLED, 3, recruit.getXpLevel() >= 20 && Main.isSmallShipsLoaded && Main.isSmallShipsCompatible, 3);
+        
+        // 3. 비활성 버튼들
+        // 4번 자리는 강등 버튼이 쓸 수 있으므로, 강등 버튼이 없을 때만(즉 Crossbowman일 때만) 표시하거나 일단 주석 처리
+        if (recruit instanceof CrossBowmanEntity) {
+             createProfessionButtons(BUTTON_ASSASSIN, TOOLTIP_ASSASSIN, 4, false && recruit.getXpLevel() >= 5, 4);
+        }
+        
+        createProfessionButtons(BUTTON_SIEGE_ENGINEER, TOOLTIP_SIEGE_ENGINEER, 5, false && recruit.getXpLevel() >= 5 && Main.isSiegeWeaponsLoaded, 5);
+        createProfessionButtons(BUTTON_GOVERNOR, TOOLTIP_GOVERNOR, 6, false && recruit.getXpLevel() >= 7, 6);
+        createProfessionButtons(BUTTON_SPY, TOOLTIP_SPY, 7, false && recruit.getXpLevel() >= 7, 7);
+        createProfessionButtons(BUTTON_ROGUE, TOOLTIP_ROGUE, 8, false && recruit.getXpLevel() >= 7, 8);
     }
 
-    private Button createProfessionButtons(Component buttonText, Component buttonTooltip, int professionID, boolean active){
-        Button professionButton = addRenderableWidget(new ExtendedButton(leftPos + 59, 31 + topPos + 23 * professionID, 80, 20, buttonText,
+    // visualIndex 파라미터를 추가하여 버튼 Y 좌표를 직접 지정
+    private Button createProfessionButtons(Component buttonText, Component buttonTooltip, int professionID, boolean active, int visualIndex){
+        Button professionButton = addRenderableWidget(new ExtendedButton(leftPos + 59, 31 + topPos + 23 * visualIndex, 80, 20, buttonText,
                 btn -> {
                     if (recruit != null) {
                         String name = this.textField.getValue();

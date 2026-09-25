@@ -1,11 +1,9 @@
 package com.talhanation.recruits.client.gui;
 
 import com.talhanation.recruits.Main;
-import com.talhanation.recruits.client.ClientManager;
 import com.talhanation.recruits.entities.AbstractRecruitEntity;
 import com.talhanation.recruits.inventory.DebugInvMenu;
 import com.talhanation.recruits.network.MessageDebugGui;
-import com.talhanation.recruits.world.RecruitsGroup;
 import de.maxhenkel.corelib.inventory.ScreenBase;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
@@ -277,8 +275,7 @@ public class DebugInvScreen extends ScreenBase<DebugInvMenu> {
         double armor = recruit.getArmorValue();
         int costs = recruit.getCost();
         double hunger = recruit.getHunger();
-        RecruitsGroup group = ClientManager.getGroup(recruit.getGroup());
-        String groupName = group != null ? group.getName() : "null";
+        int group = recruit.getGroup();
         String team = recruit.getTeam() != null ? recruit.getTeam().getName() : "null";
 
         int k = 30;//rechst links
@@ -404,7 +401,7 @@ public class DebugInvScreen extends ScreenBase<DebugInvMenu> {
         guiGraphics.drawString(font, ""+ costs, k + 90 + 80, l + 40, fontColor, false);
 
         guiGraphics.drawString(font, "Group:", k + 43 + 80, l + 50, fontColor, false);
-        guiGraphics.drawString(font, groupName, k + 90 + 80, l + 50, fontColor, false);
+        guiGraphics.drawString(font, ""+ group, k + 90 + 80, l + 50, fontColor, false);
 
         guiGraphics.drawString(font, "Follow:", k + 43 + 80, l + 60, fontColor, false);
         guiGraphics.drawString(font, ""+ follow, k + 90 + 80, l + 60, fontColor, false);

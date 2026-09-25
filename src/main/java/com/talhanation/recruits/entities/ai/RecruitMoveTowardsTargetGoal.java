@@ -32,20 +32,10 @@ public class RecruitMoveTowardsTargetGoal extends Goal {
         else if (this.target == null) {
             return false;
         }
-        else if(this.recruit.holdFormation){
-            return false;
-        }
         else if(this.recruit.isInFormation && this.target.distanceToSqr(this.recruit) > AttackUtil.getAttackReachSqr(recruit) * 1.5){
             return false;
         }
         else if (this.target.distanceToSqr(this.recruit) > (double)(this.within * this.within)) {
-            return false;
-        }
-        else if (!this.recruit.getSensing().hasLineOfSight(this.target)) {
-            // Option 2: only approach a target the recruit can actually see. Without line of sight
-            // the recruit does not chase enemies behind walls. The expensive LoS raycast is cached
-            // per tick by EntitySensing, and the attack goals query it too, so this adds no extra
-            // raycast in practice.
             return false;
         }
         else {
@@ -65,7 +55,7 @@ public class RecruitMoveTowardsTargetGoal extends Goal {
         if (this.recruit.isFollowing()){
             return false;
         }
-        return !this.recruit.getNavigation().isDone() && this.target.isAlive() && this.target.distanceToSqr(this.recruit) < (double)(this.within * this.within) && this.recruit.getSensing().hasLineOfSight(this.target);
+        return !this.recruit.getNavigation().isDone() && this.target.isAlive() && this.target.distanceToSqr(this.recruit) < (double)(this.within * this.within);
     }
 
     public void stop() {

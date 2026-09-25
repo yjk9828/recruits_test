@@ -12,18 +12,16 @@ import java.util.UUID;
 public class RecruitsPlayerInfo {
     private UUID uuid;
     private String name;
-    private boolean online;
     @Nullable
-    private final RecruitsFaction recruitsFaction;
+    private final RecruitsTeam recruitsTeam;
 
     public RecruitsPlayerInfo(UUID uuid, String name) {
         this(uuid, name, null);
     }
-
-    public RecruitsPlayerInfo(UUID uuid, String name, @Nullable RecruitsFaction recruitsFaction) {
+    public RecruitsPlayerInfo(UUID uuid, String name, @Nullable RecruitsTeam recruitsTeam) {
         this.uuid = uuid;
         this.name = name;
-        this.recruitsFaction = recruitsFaction;
+        this.recruitsTeam = recruitsTeam;
     }
 
     public UUID getUUID() {
@@ -42,37 +40,28 @@ public class RecruitsPlayerInfo {
         this.name = name;
     }
 
-    public boolean isOnline() {
-        return online;
-    }
-
-    public void setOnline(boolean online) {
-        this.online = online;
-    }
-
     @Nullable
-    public RecruitsFaction getFaction(){
-        return recruitsFaction;
+    public RecruitsTeam getRecruitsTeam(){
+        return recruitsTeam;
     }
-
     @Override
     public String toString() {
         return "{" +
                 ", uuid=" + uuid +
                 ", name=" + name +
-                ", online=" + online +
-                ", team=" + recruitsFaction +
+                ", team=" + recruitsTeam +
                 '}';
     }
+
 
     public CompoundTag toNBT() {
         CompoundTag nbt = new CompoundTag();
         nbt.putUUID("UUID", uuid);
         nbt.putString("Name", name);
-        nbt.putBoolean("Online", online);
-        if(recruitsFaction != null){
-            nbt.put("RecruitsTeam", this.recruitsFaction.toNBT());
+        if(recruitsTeam != null){
+            nbt.put("RecruitsTeam", this.recruitsTeam.toNBT());
         }
+
         return nbt;
     }
 
@@ -81,12 +70,9 @@ public class RecruitsPlayerInfo {
 
         UUID uuid = nbt.getUUID("UUID");
         String name = nbt.getString("Name");
-        boolean online = nbt.getBoolean("Online");
-        RecruitsFaction team = RecruitsFaction.fromNBT(nbt.getCompound("RecruitsTeam"));
+        RecruitsTeam team = RecruitsTeam.fromNBT(nbt.getCompound("RecruitsTeam"));
 
-        RecruitsPlayerInfo info = new RecruitsPlayerInfo(uuid, name, team);
-        info.setOnline(online);
-        return info;
+        return new RecruitsPlayerInfo(uuid, name, team);
     }
 
     public static CompoundTag toNBT(List<RecruitsPlayerInfo> list) {
@@ -114,4 +100,6 @@ public class RecruitsPlayerInfo {
 
         return list;
     }
+
+
 }

@@ -1,9 +1,7 @@
 package com.talhanation.recruits;
 
-import com.talhanation.recruits.compat.musketmod.IWeapon;
+import com.talhanation.recruits.compat.IWeapon;
 import com.talhanation.recruits.config.RecruitsServerConfig;
-import com.talhanation.recruits.pathfinding.AsyncPathProcessor;
-import com.talhanation.recruits.util.DelayedExecutor;
 import com.talhanation.recruits.entities.AbstractRecruitEntity;
 import com.talhanation.recruits.entities.ICompanion;
 import com.talhanation.recruits.entities.MessengerEntity;
@@ -11,15 +9,19 @@ import com.talhanation.recruits.entities.ai.horse.HorseRiddenByRecruitGoal;
 import com.talhanation.recruits.init.ModEntityTypes;
 import com.talhanation.recruits.inventory.PromoteContainer;
 import com.talhanation.recruits.network.MessageOpenPromoteScreen;
-import com.talhanation.recruits.world.*;
-import com.talhanation.recruits.RecruitEvent;
-import net.minecraftforge.common.MinecraftForge;
+import com.talhanation.recruits.world.PillagerPatrolSpawn;
+import com.talhanation.recruits.world.RecruitsDiplomacyManager;
+import com.talhanation.recruits.world.RecruitsPlayerUnitManager;
+import com.talhanation.recruits.world.RecruitsPatrolSpawn;
+import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.tags.BlockTags;
+import net.minecraft.world.Container;
 import net.minecraft.world.MenuProvider;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
@@ -33,6 +35,8 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.projectile.AbstractArrow;
 import net.minecraft.world.entity.projectile.Projectile;
 import net.minecraft.world.inventory.AbstractContainerMenu;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.EntityHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.scores.Team;
@@ -45,59 +49,86 @@ import net.minecraftforge.event.entity.living.LivingAttackEvent;
 import net.minecraftforge.event.entity.living.LivingDeathEvent;
 import net.minecraftforge.event.entity.living.LivingHurtEvent;
 import net.minecraftforge.event.entity.player.PlayerInteractEvent;
+import net.minecraftforge.event.level.BlockEvent;
 import net.minecraftforge.event.level.LevelEvent;
-import net.minecraftforge.event.server.ServerStartedEvent;
 import net.minecraftforge.event.server.ServerStartingEvent;
 import net.minecraftforge.event.server.ServerStoppingEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.network.NetworkHooks;
 import org.jetbrains.annotations.NotNull;
-
+import net.minecraft.tags.FluidTags;
+import net.minecraft.world.level.block.Blocks;
 import java.util.*;
 
 public class RecruitEvents {
     private static final Map<ServerLevel, RecruitsPatrolSpawn> RECRUIT_PATROL = new HashMap<>();
     private static final Map<ServerLevel, PillagerPatrolSpawn> PILLAGER_PATROL = new HashMap<>();
     public static RecruitsPlayerUnitManager recruitsPlayerUnitManager;
-    public static RecruitsGroupsManager recruitsGroupsManager;
-
     public static MinecraftServer server;
-    public static HashMap<Integer, EntityType<? extends AbstractRecruitEntity>> entitiesByProfession = new HashMap<>() {
+    static HashMap<Integer, EntityType<? extends AbstractRecruitEntity>> entitiesByProfession = new HashMap<>() {
         {
             put(0, ModEntityTypes.MESSENGER.get());
             put(1, ModEntityTypes.SCOUT.get());
-            put(2, ModEntityTypes.SIEGE_ENGINEER.get());
+            put(2, ModEntityTypes.PATROL_LEADER.get());
             put(3, ModEntityTypes.CAPTAIN.get());
-            put(4, ModEntityTypes.PATROL_LEADER.get());
         }
     };
 
     public static void promoteRecruit(AbstractRecruitEntity recruit, int profession, String name, ServerPlayer player) {
-        RecruitEvent.Promoted promoteEvent = new RecruitEvent.Promoted(recruit, profession, name, player);
-        MinecraftForge.EVENT_BUS.post(promoteEvent);
-        if (promoteEvent.isCanceled()) return;
+        System.out.println("Recruits Debug: Promote request received. ID: " + profession); // 디버그 로그
 
-        EntityType<? extends AbstractRecruitEntity> companionType = entitiesByProfession.get(profession);
+        EntityType<? extends AbstractRecruitEntity> companionType;
+
+        // ID가 -1이면 Crossbowman으로 강등(재훈련)
+        if (profession == -1) {
+            companionType = ModEntityTypes.CROSSBOWMAN.get(); 
+        } else {
+            companionType = entitiesByProfession.get(profession);
+        }
+
+        if (companionType == null) {
+            System.out.println("Recruits Debug: EntityType is null for ID " + profession);
+            return;
+        }
+
         AbstractRecruitEntity abstractRecruit = companionType.create(recruit.getCommandSenderWorld());
-        if (abstractRecruit instanceof ICompanion companion) {
+        
+        if (abstractRecruit != null) {
+            // 1. 기본 정보 설정
             abstractRecruit.setCustomName(Component.literal(name));
             abstractRecruit.copyPosition(recruit);
-            companion.applyRecruitValues(recruit);
-            companion.setOwnerName(player.getName().getString());
+            abstractRecruit.setOwnerUUID(Optional.of(player.getUUID()));
 
-            UUID groupUUID = recruit.getGroup();
-
-            recruit.discard();
-            abstractRecruit.getCommandSenderWorld().addFreshEntity(abstractRecruit);
-
-            if (groupUUID != null && !recruit.getCommandSenderWorld().isClientSide()) {
-                ServerLevel serverLevel = (ServerLevel) abstractRecruit.getCommandSenderWorld();
-                recruitsGroupsManager.addMember(groupUUID, abstractRecruit.getUUID(), serverLevel);
-                recruitsGroupsManager.removeMember(groupUUID, recruit.getUUID(), serverLevel);
-
-                recruitsGroupsManager.broadCastGroupsToPlayer(player);
+            // 2. 데이터 이관 (XP, 인벤토리 등)
+            if (abstractRecruit instanceof ICompanion companion) {
+                // ICompanion 인터페이스가 있으면 해당 메서드 사용 (가장 안전)
+                System.out.println("Recruits Debug: Using ICompanion copy logic.");
+                companion.applyRecruitValues(recruit);
+            } else {
+                // [핵심 수정] ICompanion이 아닐 경우 (예: Crossbowman) NBT 복사로 처리
+                System.out.println("Recruits Debug: Using NBT fallback copy logic.");
+                
+                // 기존 유닛의 데이터를 NBT로 저장
+                CompoundTag tag = new CompoundTag();
+                recruit.addAdditionalSaveData(tag); 
+                
+                // 새 유닛에 NBT 데이터 로드 (레벨, XP, 인벤토리 등 복원)
+                abstractRecruit.readAdditionalSaveData(tag);
+                
+                // 인벤토리 강제 동기화 (NBT 로드가 실패할 경우를 대비한 2차 안전장치)
+                if (abstractRecruit.getInventory().getContainerSize() == recruit.getInventory().getContainerSize()) {
+                     for(int k=0; k < recruit.getInventory().getContainerSize(); k++) {
+                         abstractRecruit.getInventory().setItem(k, recruit.getInventory().getItem(k));
+                     }
+                }
             }
 
+            // 3. 교체 실행
+            recruit.discard(); 
+            abstractRecruit.getCommandSenderWorld().addFreshEntity(abstractRecruit); 
+            System.out.println("Recruits Debug: Promotion/Demotion successful.");
+        } else {
+            System.out.println("Recruits Debug: Failed to create new entity instance.");
         }
     }
 
@@ -105,7 +136,7 @@ public class RecruitEvents {
         if (player instanceof ServerPlayer) {
             NetworkHooks.openScreen((ServerPlayer) player, new MenuProvider() {
                 @Override
-                public @NotNull Component getDisplayName()  {
+                public @NotNull Component getDisplayName() {
                     return recruit.getName();
                 }
 
@@ -121,70 +152,23 @@ public class RecruitEvents {
         }
     }
 
-    public static void handleGroupBackwardCompatibility(AbstractRecruitEntity recruit, int oldGroupNumber) {
-        if(recruit.getCommandSenderWorld().isClientSide()) return;
-        if(recruit.getOwner() != null){
-            ServerPlayer serverPlayer = (ServerPlayer) recruit.getOwner();
-            String name = "Group " + oldGroupNumber;
-            RecruitsGroup group = recruitsGroupsManager.getPlayersGroupByName(serverPlayer, name);
-            if(group == null){
-                group = new RecruitsGroup(name, serverPlayer, 0);
-            }
-            recruit.setGroupUUID(group.getUUID());
-            group.addMember(recruit.getUUID());
-            recruitsGroupsManager.addOrUpdateGroup(server.overworld(), serverPlayer, group);
-
-            recruitsGroupsManager.broadCastGroupsToPlayer(serverPlayer);
-        }
-    }
-
     @SubscribeEvent
     public void onServerStarting(ServerStartingEvent event) {
         server = event.getServer();
 
         recruitsPlayerUnitManager = new RecruitsPlayerUnitManager();
         recruitsPlayerUnitManager.load(server.overworld());
-
-        recruitsGroupsManager = new RecruitsGroupsManager();
-        recruitsGroupsManager.load(server.overworld());
-    }
-
-    @SubscribeEvent
-    public void onServerStarted(ServerStartedEvent event) {
-        // start() hier und nicht in ServerStartingEvent:
-        // ServerStartingEvent feuert bevor die Levels initialisiert sind — server.overworld()
-        // kann dort eine NPE werfen und würde start() nie erreichen lassen.
-        // ServerStartedEvent garantiert dass alle Levels geladen sind und der Executor
-        // vor dem ersten Entity-Tick bereit ist.
-        AsyncPathProcessor.start();
     }
 
 
     @SubscribeEvent
     public void onServerStopping(ServerStoppingEvent event) {
         recruitsPlayerUnitManager.save(server.overworld());
-
-        recruitsGroupsManager.save(server.overworld());
-
-        // Fix: Async-Executor sauber herunterfahren damit der Server nicht hängt
-        AsyncPathProcessor.shutdown();
     }
 
     @SubscribeEvent
     public void onWorldSave(LevelEvent.Save event){
         recruitsPlayerUnitManager.save(server.overworld());
-        recruitsGroupsManager.save(server.overworld());
-    }
-
-    @SubscribeEvent
-    public void onPlayerJoin(EntityJoinLevelEvent event){
-        if(event.getLevel().isClientSide()) return;
-
-        if(event.getEntity() instanceof Player player){
-            recruitsPlayerUnitManager.broadCastUnitInfoToPlayer(player);
-
-            recruitsGroupsManager.broadCastGroupsToPlayer(player);
-        }
     }
 
     @SubscribeEvent
@@ -222,27 +206,8 @@ public class RecruitEvents {
                 PillagerPatrolSpawn pillagerSpawner = PILLAGER_PATROL.get(serverWorld);
                 pillagerSpawner.tick();
             }
-
-            // Treaty expiry check (every 20 ticks = 1 second)
-            if (serverWorld.getGameTime() % 20 == 0 && FactionEvents.recruitsTreatyManager != null) {
-                FactionEvents.recruitsTreatyManager.tick(serverWorld);
-            }
         }
     }
-
-    public static void serverSideRecruitGroup(ServerLevel level){
-        List<AbstractRecruitEntity> recruitList = new ArrayList<>();
-        for(Entity entity : level.getEntities().getAll()){
-            if(entity instanceof AbstractRecruitEntity recruit)
-                recruitList.add(recruit);
-        }
-        for(AbstractRecruitEntity recruit : recruitList){
-            recruit.needsGroupUpdate = true;
-        }
-
-        recruitsGroupsManager.save(level);
-    }
-
     private static final Set<Projectile> canceledProjectiles = new HashSet<>();
 
     @SubscribeEvent
@@ -278,7 +243,7 @@ public class RecruitEvents {
 
         if (projectile instanceof AbstractArrow arrow && arrow.getPierceLevel() > 0) {
 
-            if (owner instanceof LivingEntity livingOwner && !canAttack(livingOwner, impactLiving)) {
+            if (!canAttack((LivingEntity) owner, impactLiving)) {
                 event.setImpactResult(ProjectileImpactEvent.ImpactResult.SKIP_ENTITY);
                 canceledProjectiles.add(projectile);
                 return;
@@ -295,8 +260,7 @@ public class RecruitEvents {
                         event.setImpactResult(ProjectileImpactEvent.ImpactResult.SKIP_ENTITY);
                         return;
                     }
-                }
-                else if (passenger instanceof Player player) {
+                } else if (passenger instanceof Player player) {
                     if (!canAttack(recruit, player)) {
 
                         event.setImpactResult(ProjectileImpactEvent.ImpactResult.SKIP_ENTITY);
@@ -308,8 +272,7 @@ public class RecruitEvents {
             if (!canAttack(recruit, impactLiving)) {
                 event.setImpactResult(ProjectileImpactEvent.ImpactResult.SKIP_ENTITY);
                 return;
-            }
-            else {
+            } else {
                 recruit.addXp(2);
                 recruit.checkLevel();
             }
@@ -438,10 +401,10 @@ public class RecruitEvents {
         String attackerTeamName = attackerTeam.getName();
         String targetTeamName = targetTeam.getName();
 
-        if (FactionEvents.recruitsDiplomacyManager != null) {
-            FactionEvents.recruitsDiplomacyManager.setRelation(attackerTeamName, targetTeamName,
+        if (TeamEvents.recruitsDiplomacyManager != null) {
+            TeamEvents.recruitsDiplomacyManager.setRelation(attackerTeamName, targetTeamName,
                     RecruitsDiplomacyManager.DiplomacyStatus.ENEMY, level);
-            FactionEvents.recruitsDiplomacyManager.setRelation(targetTeamName, attackerTeamName,
+            TeamEvents.recruitsDiplomacyManager.setRelation(targetTeamName, attackerTeamName,
                     RecruitsDiplomacyManager.DiplomacyStatus.ENEMY, level);
         }
     }
@@ -453,6 +416,214 @@ public class RecruitEvents {
         if (entity instanceof AbstractHorse horse) {
             horse.goalSelector.addGoal(0, new HorseRiddenByRecruitGoal(horse));
         }
+    }
+
+    @SubscribeEvent
+    public void onBlockBreakEvent(BlockEvent.BreakEvent event) {
+        if(event.getLevel().isClientSide()) return;
+        if (RecruitsServerConfig.AggroRecruitsBlockPlaceBreakEvents.get()) {
+            Player blockBreaker = event.getPlayer();
+            if (blockBreaker == null) return;
+
+            final boolean[] warn = {false};
+            final String[] name = new String[1];
+            blockBreaker.getCommandSenderWorld().getEntitiesOfClass(
+                    AbstractRecruitEntity.class,
+                    blockBreaker.getBoundingBox().inflate(32.0D)
+            ).forEach((recruit) -> {
+                if (canDamageTargetBlockEvent(recruit, blockBreaker) && recruit.getState() == 1) {
+                    recruit.setTarget(blockBreaker);
+                }
+
+                if (!warn[0] && canDamageTargetBlockEvent(recruit, blockBreaker) && recruit.getState() == 0 && recruit.isOwned()) {
+                    warn[0] = true;
+                    name[0] = recruit.getName().toString();
+                }
+            });
+
+            if (warn[0]) {
+                warnPlayer(blockBreaker, TEXT_BLOCK_WARN(name[0]));
+            }
+        }
+
+        if (RecruitsServerConfig.NeutralRecruitsBlockPlaceBreakEvents.get()) {
+            Player blockBreaker = event.getPlayer();
+            if (blockBreaker == null) return;
+
+            final boolean[] warn = {false};
+            final String[] name = new String[1];
+
+            blockBreaker.getCommandSenderWorld().getEntitiesOfClass(
+                    AbstractRecruitEntity.class,
+                    blockBreaker.getBoundingBox().inflate(32.0D)
+            ).forEach((recruit) -> {
+                if (canDamageTargetBlockEvent(recruit, blockBreaker) && recruit.getState() == 0 && recruit.isOwned()) {
+                    recruit.setTarget(blockBreaker);
+                }
+
+                if (!warn[0] && canDamageTargetBlockEvent(recruit, blockBreaker) && recruit.getState() == 0 && recruit.isOwned()) {
+                    warn[0] = true;
+                    name[0] = recruit.getName().toString();
+                }
+            });
+
+            if (warn[0]) {
+                warnPlayer(blockBreaker, TEXT_BLOCK_WARN(name[0]));
+            }
+        }
+    }
+
+    @SubscribeEvent
+    public void onBlockPlaceEvent(BlockEvent.EntityPlaceEvent event) {
+        if(event.getLevel().isClientSide()) return;
+	// 1. 설치하려는 블럭이 위험한지 확인 (용암, 불, 마그마 등)
+		BlockState placedBlock = event.getPlacedBlock();
+		boolean isDangerous = placedBlock.getFluidState().is(FluidTags.LAVA) 
+							  || placedBlock.is(Blocks.FIRE) 
+							  || placedBlock.is(Blocks.MAGMA_BLOCK)
+							  || placedBlock.is(Blocks.CAMPFIRE);
+
+		if (isDangerous) {
+			Entity blockPlacer = event.getEntity();
+			// 위험한 블럭인 경우, 주변에 리크루트가 있는지 확인
+			boolean recruitNearby = !blockPlacer.getCommandSenderWorld().getEntitiesOfClass(
+					AbstractRecruitEntity.class,
+					blockPlacer.getBoundingBox().inflate(5.0D) // 감지 범위를 좁게 설정 (예: 5칸)
+			).isEmpty();
+
+			if (recruitNearby) {
+				// 리크루트가 근처에 있다면 동맹이든 아니든 설치 자체를 막아버림 (Anti-Griefing)
+				event.setCanceled(true); 
+				
+				if (blockPlacer instanceof Player player) {
+					player.sendSystemMessage(Component.literal("리크루트 근처에 위험한 블럭을 설치할 수 없습니다!"));
+				}
+				return; // 이벤트 취소 후 종료
+			}
+		}
+        if (RecruitsServerConfig.AggroRecruitsBlockPlaceBreakEvents.get()) {
+            Entity blockPlacer = event.getEntity();
+
+            if (blockPlacer instanceof LivingEntity livingBlockPlacer) {
+                final boolean[] warn = {false};
+                final String[] name = new String[1];
+
+                livingBlockPlacer.getCommandSenderWorld().getEntitiesOfClass(
+                        AbstractRecruitEntity.class,
+                        livingBlockPlacer.getBoundingBox().inflate(32.0D),
+                        (recruit) -> canDamageTargetBlockEvent(recruit, livingBlockPlacer)
+                ).forEach((recruit) -> {
+                    if (recruit.getState() == 1) {
+                        recruit.setTarget(livingBlockPlacer);
+                    }
+
+                    if (blockPlacer instanceof Player && !warn[0] &&
+                            recruit.getState() == 0 && recruit.isOwned()) {
+                        warn[0] = true;
+                        name[0] = recruit.getName().toString();
+                    }
+                });
+
+                if (blockPlacer instanceof Player player && warn[0]) {
+                    warnPlayer(player, TEXT_BLOCK_WARN(name[0]));
+                }
+            }
+        }
+
+        if (RecruitsServerConfig.NeutralRecruitsBlockPlaceBreakEvents.get()) {
+            Entity blockPlacer = event.getEntity();
+
+            final boolean[] warn = {false};
+            final String[] name = new String[1];
+
+            if (blockPlacer instanceof LivingEntity livingBlockPlacer) {
+                livingBlockPlacer.getCommandSenderWorld().getEntitiesOfClass(
+                        AbstractRecruitEntity.class,
+                        livingBlockPlacer.getBoundingBox().inflate(32.0D),
+                        (recruit) -> canDamageTargetBlockEvent(recruit, livingBlockPlacer) &&
+                                recruit.getState() == 0 && recruit.isOwned()
+                ).forEach((recruit) -> {
+                    recruit.setTarget(livingBlockPlacer);
+
+                    if (blockPlacer instanceof Player && !warn[0]) {
+                        warn[0] = true;
+                        name[0] = recruit.getName().toString();
+                    }
+                });
+
+                if (blockPlacer instanceof Player player && warn[0]) {
+                    warnPlayer(player, TEXT_BLOCK_WARN(name[0]));
+                }
+            }
+        }
+    }
+
+    @SubscribeEvent
+    public void onBlockInteract(PlayerInteractEvent.RightClickBlock event) {
+        if(event.getLevel().isClientSide()) return;
+        BlockPos pos = event.getHitVec().getBlockPos();
+        Player player = event.getEntity();
+
+        BlockState selectedBlock = player.getCommandSenderWorld().getBlockState(pos);
+        BlockEntity blockEntity = player.getCommandSenderWorld().getBlockEntity(pos);
+
+        if (selectedBlock.is(BlockTags.BUTTONS) ||
+                selectedBlock.is(BlockTags.DOORS) ||
+                selectedBlock.is(BlockTags.WOODEN_TRAPDOORS) ||
+                selectedBlock.is(BlockTags.WOODEN_BUTTONS) ||
+                selectedBlock.is(BlockTags.WOODEN_DOORS) ||
+                selectedBlock.is(BlockTags.SHULKER_BOXES) ||
+                selectedBlock.is(BlockTags.FENCE_GATES) ||
+                selectedBlock.is(BlockTags.ANVIL) ||
+                (blockEntity instanceof Container)
+        ) {
+            if (RecruitsServerConfig.AggroRecruitsBlockInteractingEvents.get()) {
+                List<AbstractRecruitEntity> list = player.getCommandSenderWorld().getEntitiesOfClass(
+                        AbstractRecruitEntity.class,
+                        player.getBoundingBox().inflate(32.0D)
+                );
+                for (AbstractRecruitEntity recruits : list) {
+                    if (canDamageTargetBlockEvent(recruits, player) && recruits.getState() == 1) {
+                        recruits.setTarget(player);
+                    }
+                }
+
+                if (list.stream().anyMatch(recruit -> canDamageTargetBlockEvent(recruit, player) && recruit.getState() == 0 && recruit.isOwned())) {
+                    warnPlayer(player, TEXT_INTERACT_WARN(list.get(0).getName().getString()));
+                }
+            }
+
+            if (RecruitsServerConfig.NeutralRecruitsBlockInteractingEvents.get()) {
+                List<AbstractRecruitEntity> list = Objects.requireNonNull(player.getCommandSenderWorld().getEntitiesOfClass(AbstractRecruitEntity.class, player.getBoundingBox().inflate(32.0D)));
+                for (AbstractRecruitEntity recruits : list) {
+                    if (canDamageTargetBlockEvent(recruits, player) && recruits.getState() == 0 && recruits.isOwned()) {
+                        recruits.setTarget(player);
+                    }
+                }
+
+                if (list.stream().anyMatch(recruit -> canDamageTargetBlockEvent(recruit, player) && recruit.getState() == 0 && recruit.isOwned())) {
+                    warnPlayer(player, TEXT_INTERACT_WARN(list.get(0).getName().getString()));
+                }
+            }
+        }
+    }
+
+    public boolean canDamageTargetBlockEvent(AbstractRecruitEntity recruit, LivingEntity target) {
+        if (recruit.isOwned() && target instanceof AbstractRecruitEntity recruitEntityTarget) {
+            if (recruit.getOwnerUUID().equals(recruitEntityTarget.getOwnerUUID())) {
+                return false;
+            }
+            else if (recruit.getTeam() != null && recruitEntityTarget.getTeam() != null && recruit.getTeam().equals(recruitEntityTarget.getTeam())){
+                return false;
+            }
+        } else if (recruit.isOwned() && target instanceof Player player) {
+            if (recruit.getOwnerUUID().equals(player.getUUID())) {
+                return false;
+            }
+        } else if (target instanceof AbstractRecruitEntity recruitEntityTarget && recruit.getProtectUUID() != null && recruitEntityTarget.getProtectUUID() != null && recruit.getProtectUUID().equals(recruitEntityTarget.getProtectUUID())) {
+            return false;
+        }
+        return RecruitEvents.canHarmTeamNoFriendlyFire(recruit, target);
     }
 
     public static boolean canAttack(LivingEntity attacker, LivingEntity target) {
@@ -483,6 +654,7 @@ public class RecruitEvents {
         return canHarmTeam(attacker, animal);
     }
 
+
     public static boolean canAttackPlayer(LivingEntity attacker, Player player) {
         if (attacker instanceof AbstractRecruitEntity recruit) {
             if(player.getUUID().equals(recruit.getOwnerUUID())
@@ -499,28 +671,19 @@ public class RecruitEvents {
         if (attacker.equals(targetRecruit)) return false;
 
         if (attacker instanceof AbstractRecruitEntity attackerRecruit) {
-            // Same player owner → never attack
             if (attackerRecruit.isOwned() && targetRecruit.isOwned() &&
                     attackerRecruit.getOwnerUUID().equals(targetRecruit.getOwnerUUID())) {
                 return false;
             }
 
-            // Same scoreboards team with friendly fire off → never attack
             if (attackerRecruit.getTeam() != null && targetRecruit.getTeam() != null &&
                     attackerRecruit.getTeam().equals(targetRecruit.getTeam()) &&
                     !attackerRecruit.getTeam().isAllowFriendlyFire()) {
                 return false;
             }
 
-            // Same patrol group (protectUUID points to same leader) → never attack
             if (attackerRecruit.getProtectUUID() != null &&
                     attackerRecruit.getProtectUUID().equals(targetRecruit.getProtectUUID())) {
-                return false;
-            }
-
-            // Same RecruitsGroup UUID → never attack (covers NPC patrol units with no owner/team)
-            if (attackerRecruit.getGroup() != null &&
-                    attackerRecruit.getGroup().equals(targetRecruit.getGroup())) {
                 return false;
             }
 
@@ -531,26 +694,26 @@ public class RecruitEvents {
     }
 
     public static boolean isAlly(Team team1, Team team2) {
-        if (team1 == null || team2 == null || FactionEvents.recruitsDiplomacyManager == null) {
+        if (team1 == null || team2 == null || TeamEvents.recruitsDiplomacyManager == null) {
             return false;
         }
-        return FactionEvents.recruitsDiplomacyManager.getRelation(team1.getName(), team2.getName()) ==
+        return TeamEvents.recruitsDiplomacyManager.getRelation(team1.getName(), team2.getName()) ==
                 RecruitsDiplomacyManager.DiplomacyStatus.ALLY;
     }
 
     public static boolean isEnemy(Team team1, Team team2) {
-        if (team1 == null || team2 == null || FactionEvents.recruitsDiplomacyManager == null) {
+        if (team1 == null || team2 == null || TeamEvents.recruitsDiplomacyManager == null) {
             return false;
         }
-        return FactionEvents.recruitsDiplomacyManager.getRelation(team1.getName(), team2.getName()) ==
+        return TeamEvents.recruitsDiplomacyManager.getRelation(team1.getName(), team2.getName()) ==
                 RecruitsDiplomacyManager.DiplomacyStatus.ENEMY;
     }
 
     public static boolean isNeutral(Team team1, Team team2) {
-        if (team1 == null || team2 == null || FactionEvents.recruitsDiplomacyManager == null) {
+        if (team1 == null || team2 == null || TeamEvents.recruitsDiplomacyManager == null) {
             return true;
         }
-        return FactionEvents.recruitsDiplomacyManager.getRelation(team1.getName(), team2.getName()) ==
+        return TeamEvents.recruitsDiplomacyManager.getRelation(team1.getName(), team2.getName()) ==
                 RecruitsDiplomacyManager.DiplomacyStatus.NEUTRAL;
     }
 
@@ -560,15 +723,11 @@ public class RecruitEvents {
 
         if (attackerTeam == null || targetTeam == null) return true;
 
+
         if (attackerTeam.equals(targetTeam) && !attackerTeam.isAllowFriendlyFire()) return false;
 
-        if (isAlly(attackerTeam, targetTeam)) return false;
 
-        if (FactionEvents.recruitsTreatyManager != null && FactionEvents.recruitsTreatyManager.hasTreaty(attackerTeam.getName(), targetTeam.getName())) {
-            return false;
-        }
-
-        return true;
+        return !isAlly(attackerTeam, targetTeam);
     }
 
     public static boolean canHarmTeamNoFriendlyFire(LivingEntity attacker, LivingEntity target) {
@@ -577,19 +736,17 @@ public class RecruitEvents {
 
         if (team == null) {
             return true;
+
         } else if (team1 == null) {
             return true;
-        } else if (team == team1) {
+        }
+        else if(team == team1){
             return false;
-        } else {
-            RecruitsDiplomacyManager.DiplomacyStatus relation = FactionEvents.recruitsDiplomacyManager.getRelation(team.getName(), team1.getName());
-            if (relation == RecruitsDiplomacyManager.DiplomacyStatus.ALLY) return false;
+        }
+        else {
+            RecruitsDiplomacyManager.DiplomacyStatus relation = TeamEvents.recruitsDiplomacyManager.getRelation(team.getName(), team1.getName());
 
-            if (FactionEvents.recruitsTreatyManager != null && FactionEvents.recruitsTreatyManager.hasTreaty(team.getName(), team1.getName())) {
-                return false;
-            }
-
-            return true;
+            return relation != RecruitsDiplomacyManager.DiplomacyStatus.ALLY;
         }
     }
 
@@ -598,7 +755,7 @@ public class RecruitEvents {
         Entity target = event.getEntity();
 
         if (target instanceof AbstractRecruitEntity recruit) {
-            if (!recruit.getIsOwned() || server == null) return;
+            if (!recruit.getIsOwned() || server.overworld().isClientSide()) return;
 
             //Morale loss when recruits teammate die
             UUID owner = recruit.getOwnerUUID();
@@ -608,7 +765,7 @@ public class RecruitEvents {
                     (entity) -> entity.getOwnerUUID() != null && entity.getOwnerUUID().equals(owner)
             ).forEach((entity) -> {
                 float currentMoral = entity.getMorale();
-                float newMorale = currentMoral - 0.1F;
+                float newMorale = currentMoral - 0.2F;
                 entity.setMoral(Math.max(newMorale, 0F));
             });
         }
@@ -641,5 +798,42 @@ public class RecruitEvents {
                 iterator.remove();
             }
         }
+    }
+    private void removeArrow(Entity entity){
+        if(entity instanceof AbstractArrow arrow && arrow.pickup == AbstractArrow.Pickup.DISALLOWED && arrow.inGroundTime > 300){
+            entity.discard();
+        }
+    }
+
+    public byte getSavedWarning(Player player) {
+        CompoundTag playerNBT = player.getPersistentData();
+        CompoundTag nbt = playerNBT.getCompound(Player.PERSISTED_NBT_TAG);
+
+        return nbt.getByte("RecruitWarnings");
+    }
+
+    public void saveCurrentWarning(Player player, byte x) {
+        CompoundTag playerNBT = player.getPersistentData();
+        CompoundTag nbt = playerNBT.getCompound(Player.PERSISTED_NBT_TAG);
+
+        nbt.putByte("RecruitWarnings", x);
+        playerNBT.put(Player.PERSISTED_NBT_TAG, nbt);
+    }
+
+    private void warnPlayer(Player player, Component component) {
+        saveCurrentWarning(player, (byte) (getSavedWarning(player) + 1));
+
+        if (getSavedWarning(player) >= 0) {
+            player.sendSystemMessage(component);
+            saveCurrentWarning(player, (byte) -10);
+        }
+    }
+
+    public static MutableComponent TEXT_BLOCK_WARN(String name) {
+        return Component.translatable("chat.recruits.text.block_placing_warn", name);
+    }
+
+    public static MutableComponent TEXT_INTERACT_WARN(String name) {
+        return Component.translatable("chat.recruits.text.block_interact_warn", name);
     }
 }

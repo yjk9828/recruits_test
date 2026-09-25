@@ -2,24 +2,22 @@ package com.talhanation.recruits.client.gui.group;
 
 
 import com.google.common.collect.Lists;
-import com.talhanation.recruits.client.ClientManager;
+import com.talhanation.recruits.Main;
 import com.talhanation.recruits.client.gui.widgets.ListScreenListBase;
-import com.talhanation.recruits.world.RecruitsGroup;
-import org.jetbrains.annotations.Nullable;
+import com.talhanation.recruits.network.MessageServerSavePlayerGroups;
 
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
-import java.util.UUID;
 
 public class RecruitsGroupList extends ListScreenListBase<RecruitsGroupEntry> {
 
-    protected IGroupSelection screen;
+    protected RecruitsGroupListScreen screen;
     protected final List<RecruitsGroupEntry> entries;
     protected String filter;
-    protected List<UUID> blackList = new ArrayList<>();
-    public RecruitsGroupList(int width, int height, int x, int y, int size, IGroupSelection screen, List<UUID> blackList) {
+    public static List<RecruitsGroup> groups;
+    public RecruitsGroupList(int width, int height, int x, int y, int size, RecruitsGroupListScreen screen) {
         super(width, height, x, y, size);
         this.screen = screen;
         this.entries = Lists.newArrayList();
@@ -27,24 +25,22 @@ public class RecruitsGroupList extends ListScreenListBase<RecruitsGroupEntry> {
         setRenderBackground(false);
         setRenderTopAndBottom(false);
         setRenderSelection(true);
-
-        if(blackList != null){
-            this.blackList.addAll(blackList);
-        }
+        hasUpdated = false;
     }
 
+    public static boolean hasUpdated;
     public void tick() {
-        if(ClientManager.groups != null){
+        if(!hasUpdated && groups != null){
             updateEntryList();
+            hasUpdated = true;
         }
     }
 
     public void updateEntryList() {
         entries.clear();
 
-        for (RecruitsGroup group : ClientManager.groups) {
-            if(!blackList.contains(group.getUUID()))
-                entries.add(new RecruitsGroupEntry(screen, group));
+        for (RecruitsGroup group : groups) {
+            entries.add(new RecruitsGroupEntry(screen, group));
         }
 
         updateFilter();
@@ -53,29 +49,42 @@ public class RecruitsGroupList extends ListScreenListBase<RecruitsGroupEntry> {
     public void updateFilter() {
         clearEntries();
         List<RecruitsGroupEntry> filteredEntries = new ArrayList<>(entries);
+
         if (!filter.isEmpty()) {
-            filteredEntries.removeIf(
-                groupEntry -> groupEntry.getGroup() == null ||
-                              !groupEntry.getGroup().getName().toLowerCase(Locale.ROOT).contains(filter)
-            );
+            filteredEntries.removeIf(teamEntry -> {
+                return teamEntry.getGroup() == null ||
+                        !teamEntry.getGroup().getName().toLowerCase(Locale.ROOT).contains(filter.toLowerCase(Locale.ROOT));
+            });
         }
 
+		filteredEntries.sort((e1, e2) -> {
+					if (e1.getGroup() == null || e2.getGroup() == null) {
+						return 0;
+					}
+					// 그룹 이름을 기준으로 문자열을 비교하여 정렬합니다.
+					return e1.getGroup().getName().compareTo(e2.getGroup().getName());
+				});
+
         replaceEntries(filteredEntries);
+    }
+
+
+    private String volumeEntryToString(RecruitsGroupEntry entry) {
+        return entry.getGroup().getName() == null ? "" : entry.getGroup().getName();
     }
 
     public void setFilter(String filter) {
         this.filter = filter;
         updateFilter();
     }
-    @Nullable
-    public RecruitsGroupEntry getGroupEntryAtPosition(double x, double y){
-        return this.getEntryAtPosition(x,y);
-    }
-
-
 
     public boolean isEmpty() {
         return children().isEmpty();
+    }
+
+    public static void saveGroups(boolean update) {
+        Main.SIMPLE_CHANNEL.sendToServer(new MessageServerSavePlayerGroups(groups, update));
+        hasUpdated = false;
     }
 }
 

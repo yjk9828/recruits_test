@@ -3,7 +3,6 @@ package com.talhanation.recruits.client.events;
 
 import com.talhanation.recruits.Main;
 import com.talhanation.recruits.client.models.RecruitVillagerModel;
-import com.talhanation.recruits.client.gui.worldmap.storage.WorldMapCacheManager;
 import com.talhanation.recruits.client.render.RecruitHumanRenderer;
 import com.talhanation.recruits.client.render.RecruitVillagerRenderer;
 import com.talhanation.recruits.client.render.layer.RecruitArmorLayer;
@@ -11,7 +10,6 @@ import com.talhanation.recruits.config.RecruitsClientConfig;
 import com.talhanation.recruits.init.ModEntityTypes;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.model.geom.ModelLayerLocation;
-import net.minecraft.client.renderer.texture.TextureAtlas;
 import net.minecraft.client.renderer.entity.EntityRenderers;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.Entity;
@@ -20,8 +18,6 @@ import net.minecraft.world.phys.HitResult;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
 import net.minecraftforge.client.event.EntityRenderersEvent;
-import net.minecraftforge.client.event.ModelEvent;
-import net.minecraftforge.client.event.TextureStitchEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 
@@ -50,10 +46,6 @@ public class ClientEvent {
             EntityRenderers.register(ModEntityTypes.SCOUT.get(), RecruitVillagerRenderer::new );
             EntityRenderers.register(ModEntityTypes.PATROL_LEADER.get(), RecruitVillagerRenderer::new );
             EntityRenderers.register(ModEntityTypes.CAPTAIN.get(), RecruitVillagerRenderer::new );
-            EntityRenderers.register(ModEntityTypes.SIEGE_ENGINEER.get(), RecruitVillagerRenderer::new );
-
-            //OTHER
-            EntityRenderers.register(ModEntityTypes.VILLAGER_NOBLE.get(), RecruitVillagerRenderer::new );
 
         }
         else{
@@ -69,13 +61,6 @@ public class ClientEvent {
             EntityRenderers.register(ModEntityTypes.SCOUT.get(), RecruitHumanRenderer::new );
             EntityRenderers.register(ModEntityTypes.PATROL_LEADER.get(), RecruitHumanRenderer::new );
             EntityRenderers.register(ModEntityTypes.CAPTAIN.get(), RecruitHumanRenderer::new );
-            EntityRenderers.register(ModEntityTypes.SIEGE_ENGINEER.get(), RecruitHumanRenderer::new );
-			
-            //OTHER
-            EntityRenderers.register(ModEntityTypes.VILLAGER_NOBLE.get(), RecruitHumanRenderer::new );
-
-  
-
         }
     }
 
@@ -85,18 +70,6 @@ public class ClientEvent {
         event.registerLayerDefinition(ClientEvent.RECRUIT_OUTER_ARMOR, RecruitArmorLayer::createOuterArmorLayer);
         event.registerLayerDefinition(ClientEvent.RECRUIT_INNER_ARMOR, RecruitArmorLayer::createInnerArmorLayer);
 
-    }
-
-    @SubscribeEvent
-    public static void modelBakingCompleted(ModelEvent.BakingCompleted event) {
-        WorldMapCacheManager.getInstance().onClientModelsReloaded();
-    }
-
-    @SubscribeEvent
-    public static void textureStitchCompleted(TextureStitchEvent.Post event) {
-        if (TextureAtlas.LOCATION_BLOCKS.equals(event.getAtlas().location())) {
-            WorldMapCacheManager.getInstance().onClientBlockAtlasStitched();
-        }
     }
 
     @Nullable

@@ -48,7 +48,7 @@ public class RecruitPathNavigation extends AsyncGroundPathNavigation {
     }
 
     public boolean moveTo(double x, double y, double z, double speed) {
-        this.recruit.setMaxFallDistance(1);
+        this.recruit.setMaxFallDistance(5);
         ((RecruitsPathNodeEvaluator) this.nodeEvaluator).setTarget((int) x, (int) y, (int) z);
         return this.moveTo(this.createPath(new BlockPos((int) x, (int) y, (int) z), 0), speed);
     }

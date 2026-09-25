@@ -65,12 +65,12 @@ public class ModEntityTypes {
     public static final RegistryObject<EntityType<ScoutEntity>> SCOUT = ENTITY_TYPES.register("scout",
             () -> EntityType.Builder.of(ScoutEntity::new, MobCategory.CREATURE)
                     .sized(0.6F, 1.95F)
-                    .clientTrackingRange(10)
+                    .clientTrackingRange(20)
                     .canSpawnFarFromPlayer()
                     .build(new ResourceLocation(Main.MOD_ID, "scout").toString()));
 
-    public static final RegistryObject<EntityType<CommanderEntity>> PATROL_LEADER = ENTITY_TYPES.register("patrol_leader",
-            () -> EntityType.Builder.of(CommanderEntity::new, MobCategory.CREATURE)
+    public static final RegistryObject<EntityType<PatrolLeaderEntity>> PATROL_LEADER = ENTITY_TYPES.register("patrol_leader",
+            () -> EntityType.Builder.of(PatrolLeaderEntity::new, MobCategory.CREATURE)
                     .sized(0.6F, 1.95F)
                     .clientTrackingRange(10)
                     .canSpawnFarFromPlayer()
@@ -79,23 +79,9 @@ public class ModEntityTypes {
     public static final RegistryObject<EntityType<CaptainEntity>> CAPTAIN = ENTITY_TYPES.register("captain",
             () -> EntityType.Builder.of(CaptainEntity::new, MobCategory.CREATURE)
                     .sized(0.6F, 1.95F)
-                    .clientTrackingRange(10)
+                    .clientTrackingRange(20)
                     .canSpawnFarFromPlayer()
                     .build(new ResourceLocation(Main.MOD_ID, "captain").toString()));
-
-    public static final RegistryObject<EntityType<VillagerNobleEntity>> VILLAGER_NOBLE = ENTITY_TYPES.register("villager_noble",
-            () -> EntityType.Builder.of(VillagerNobleEntity::new, MobCategory.CREATURE)
-                    .sized(0.6F, 1.95F)
-                    .clientTrackingRange(10)
-                    .canSpawnFarFromPlayer()
-                    .build(new ResourceLocation(Main.MOD_ID, "villager_noble").toString()));
-
-    public static final RegistryObject<EntityType<SiegeEngineerEntity>> SIEGE_ENGINEER = ENTITY_TYPES.register("siege_engineer",
-            () -> EntityType.Builder.of(SiegeEngineerEntity::new, MobCategory.CREATURE)
-                    .sized(0.6F, 1.95F)
-                    .clientTrackingRange(10)
-                    .canSpawnFarFromPlayer()
-                    .build(new ResourceLocation(Main.MOD_ID, "siege_engineer").toString()));
 
 
     /*

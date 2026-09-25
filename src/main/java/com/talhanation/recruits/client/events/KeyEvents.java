@@ -2,15 +2,14 @@ package com.talhanation.recruits.client.events;
 
 import com.talhanation.recruits.CommandEvents;
 import com.talhanation.recruits.Main;
-import com.talhanation.recruits.client.gui.worldmap.WorldMapScreen;
-import com.talhanation.recruits.client.gui.faction.FactionMainScreen;
+import com.talhanation.recruits.TeamEvents;
+import com.talhanation.recruits.client.gui.team.TeamMainScreen;
 import com.talhanation.recruits.entities.AbstractRecruitEntity;
 import com.talhanation.recruits.init.ModShortcuts;
 import com.talhanation.recruits.network.MessageWriteSpawnEgg;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.level.Level;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
 import net.minecraftforge.client.event.InputEvent;
@@ -31,13 +30,7 @@ public class KeyEvents {
         }
 
         if (ModShortcuts.TEAM_SCREEN_KEY.isDown()) {
-            minecraft.setScreen(new FactionMainScreen(clientPlayerEntity));
-        }
-
-        if (ModShortcuts.MAP_SCREEN_KEY.isDown()) {
-            if (minecraft.level != null && minecraft.level.dimension() == Level.OVERWORLD) {
-                minecraft.setScreen(new WorldMapScreen());
-            }
+            minecraft.setScreen(new TeamMainScreen(clientPlayerEntity));
         }
     }
 

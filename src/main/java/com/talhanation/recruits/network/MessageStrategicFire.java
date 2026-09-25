@@ -15,13 +15,13 @@ import java.util.UUID;
 public class MessageStrategicFire implements Message<MessageStrategicFire> {
 
     private UUID player;
-    private UUID group;
+    private int group;
     private boolean should;
 
     public MessageStrategicFire() {
     }
 
-    public MessageStrategicFire(UUID player, UUID group, boolean should) {
+    public MessageStrategicFire(UUID player, int group, boolean should) {
         this.player = player;
         this.group = group;
         this.should = should;
@@ -35,7 +35,7 @@ public class MessageStrategicFire implements Message<MessageStrategicFire> {
         ServerPlayer serverPlayer = Objects.requireNonNull(context.getSender());
         serverPlayer.getCommandSenderWorld().getEntitiesOfClass(
                 AbstractRecruitEntity.class,
-                serverPlayer.getBoundingBox().inflate(200)
+                serverPlayer.getBoundingBox().inflate(120)
         ).forEach((recruit) ->
                 CommandEvents.onStrategicFireCommand(
                         serverPlayer,
@@ -49,14 +49,14 @@ public class MessageStrategicFire implements Message<MessageStrategicFire> {
 
     public MessageStrategicFire fromBytes(FriendlyByteBuf buf) {
         this.player = buf.readUUID();
-        this.group = buf.readUUID();
+        this.group = buf.readInt();
         this.should = buf.readBoolean();
         return this;
     }
 
     public void toBytes(FriendlyByteBuf buf) {
         buf.writeUUID(this.player);
-        buf.writeUUID(this.group);
+        buf.writeInt(this.group);
         buf.writeBoolean(this.should);
     }
 }

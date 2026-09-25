@@ -13,7 +13,7 @@ import org.jetbrains.annotations.NotNull;
 
 import java.util.*;
 
-public abstract class AbstractChunkLoaderEntity extends BowmanEntity {
+public abstract class AbstractChunkLoaderEntity extends AbstractRecruitEntity {
     private Optional<RecruitsChunk> loadedChunk = Optional.empty();
 
     public AbstractChunkLoaderEntity(EntityType<? extends AbstractChunkLoaderEntity> entityType, Level world) {

@@ -1,17 +1,11 @@
 package com.talhanation.recruits.entities.ai;
 
 import com.talhanation.recruits.entities.AbstractRecruitEntity;
-import com.talhanation.recruits.entities.BowmanEntity;
-import com.talhanation.recruits.entities.CrossBowmanEntity;
 import com.talhanation.recruits.util.AttackUtil;
 import net.minecraft.world.entity.EntitySelector;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.ai.goal.Goal;
 import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.item.AxeItem;
-import net.minecraft.world.item.BowItem;
-import net.minecraft.world.item.CrossbowItem;
-import net.minecraft.world.item.SwordItem;
 import net.minecraft.world.level.pathfinder.Path;
 import net.minecraft.world.phys.Vec3;
 
@@ -60,11 +54,6 @@ public class RecruitMeleeAttackGoal extends Goal {
         if (target == null || !target.isAlive()) {
             return false;
         } else if (!this.recruit.getSensing().hasLineOfSight(target)) {
-            // Option 2: drop the target when line of sight is lost so the recruit does not keep
-            // it queued while behind cover. The move-towards goal is also LoS-gated, so once sight
-            // is gone nothing chases; the next search re-acquires only if the target becomes
-            // visible again.
-            this.recruit.setTarget(null);
             return false;
         } else {
             boolean canAttackHoldPos = canAttackHoldPos();
@@ -78,19 +67,12 @@ public class RecruitMeleeAttackGoal extends Goal {
     public void start() {
         this.recruit.setAggressive(true);
         this.pathingCooldown = 0;
-
-        this.recruit.switchMainHandItem(itemStack -> itemStack.getItem() instanceof SwordItem || itemStack.getItem() instanceof AxeItem);
     }
 
     public void stop() {
         LivingEntity target = this.recruit.getTarget();
         if (!EntitySelector.NO_CREATIVE_OR_SPECTATOR.test(target)) {
             this.recruit.setTarget(null);
-        }
-
-        if(recruit.getShouldRanged()){
-            if(this.recruit instanceof CrossBowmanEntity) this.recruit.switchMainHandItem(itemStack -> itemStack.getItem() instanceof CrossbowItem);
-            if(this.recruit instanceof BowmanEntity) this.recruit.switchMainHandItem(itemStack -> itemStack.getItem() instanceof BowItem);
         }
 
         this.recruit.setAggressive(false);
@@ -117,8 +99,7 @@ public class RecruitMeleeAttackGoal extends Goal {
             if (distanceToTarget <= reach && canSee) {
                 if (isNotFollowing) this.recruit.getNavigation().stop();
                 AttackUtil.performAttack(this.recruit, target);
-            }
-            else if (canSee && isNotFollowing && coolDownElapsed && !recruit.holdFormation) {
+            } else if (canSee && isNotFollowing && coolDownElapsed) {
                 this.pathingCooldown = 4 + this.recruit.getRandom().nextInt(4);
 
                 if (distanceToTarget > 2024.0D) {
@@ -136,7 +117,7 @@ public class RecruitMeleeAttackGoal extends Goal {
         LivingEntity target = this.recruit.getTarget();
         if (target != null && pos != null && recruit.getShouldHoldPos()) {
             double distanceToPos = target.distanceToSqr(pos);
-            double ref = 400;
+            double ref = recruit.isInFormation ? 169 : 400;
 
             return distanceToPos < ref;
         }

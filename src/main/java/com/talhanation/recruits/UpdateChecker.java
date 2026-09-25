@@ -17,7 +17,6 @@ public class UpdateChecker {
 
     @SubscribeEvent
     public void onPlayerJoinWorld(PlayerEvent.PlayerLoggedInEvent event){
-        if(!event.getEntity().getCommandSenderWorld().isClientSide()) return;
         if(RecruitsClientConfig.UpdateCheckerClientside.get()){
             VersionChecker.Status status = VersionChecker.getResult((ModList.get().getModContainerById("recruits").get()).getModInfo()).status();
             switch (status){

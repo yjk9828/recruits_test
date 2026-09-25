@@ -1,5 +1,7 @@
 package com.talhanation.recruits.network;
 
+import com.talhanation.recruits.CommandEvents;
+import com.talhanation.recruits.TeamEvents;
 import de.maxhenkel.corelib.net.Message;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.server.level.ServerPlayer;

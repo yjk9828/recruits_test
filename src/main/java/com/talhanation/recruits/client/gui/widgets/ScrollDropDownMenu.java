@@ -1,6 +1,6 @@
 package com.talhanation.recruits.client.gui.widgets;
 
-import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.blaze3d.systems.RenderSystem; 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.AbstractWidget;
@@ -35,7 +35,7 @@ public class ScrollDropDownMenu<T> extends AbstractWidget {
     private boolean isScrolling = false; // Whether the scrollbar is being dragged
     private int scrollbarWidth = 6; // Width of the scrollbar
     private int scrollbarHandleHeight; // Height of the scrollbar handle
-    public boolean canSelect = true;
+
     public ScrollDropDownMenu(T selectedOption, int x, int y, int width, int height, List<T> options, Function<T, String> optionTextGetter, Consumer<T> onSelect) {
         super(x, y, width, height, Component.literal(""));
         this.selectedOption = selectedOption;
@@ -58,8 +58,6 @@ public class ScrollDropDownMenu<T> extends AbstractWidget {
         }
 
         guiGraphics.drawCenteredString(Minecraft.getInstance().font, getSelectedText(), this.getX() + this.width / 2, this.getY() + (this.height - 8) / 2, displayColor);
-
-        DropDownMenu.renderArrow(guiGraphics, this.getX() + this.width - 10, this.getY() + this.height / 2, isOpen, displayColor);
 
         if (isOpen) {
             int dropdownHeight = maxVisibleOptions * optionHeight;
@@ -112,7 +110,7 @@ public class ScrollDropDownMenu<T> extends AbstractWidget {
 
     public void onMouseClick(double mouseX, double mouseY) {
         if(!visible) return;
-        if(!canSelect) return;
+
         if (isOpen) {
             // Check if the click is on the scrollbar
             if (isMouseOverScrollbar((int) mouseX, (int) mouseY)) {
@@ -174,7 +172,7 @@ public class ScrollDropDownMenu<T> extends AbstractWidget {
     @Override
     public boolean mouseReleased(double mouseX, double mouseY, int button) {
         if(!visible) return false;
-
+        
         if (isScrolling) {
             isScrolling = false;
             return true;

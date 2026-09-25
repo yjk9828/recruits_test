@@ -22,14 +22,31 @@ public class BlockWithWeapon extends Goal {
         this.recruit = recruit;
     }
 
+	@Override
     public boolean canUse() {
-        if(Main.isEpicKnightsLoaded && recruit.blockCoolDown == 0){
-            boolean noItemInOffhand = this.recruit.getOffhandItem().isEmpty();
-            boolean canBlockWithItem = this.recruit.getMainHandItem().getDescriptionId().contains("magistu");
-
-            return canBlockWithItem && shouldBlock() && !recruit.isFollowing() && recruit.canBlock() && !recruit.getShouldMovePos() && noItemInOffhand && !this.recruit.swinging;
+        ItemStack offhand = this.recruit.getOffhandItem();
+        
+        // 에너지 방패 잔량 체크
+        if (offhand.getItem() instanceof com.oblivioussp.spartanshields.item.IItemPoweredFE energyShield) {
+            if (energyShield.getFEStored(offhand) <= 0) {
+                return false; // 에너지 없으면 방어 안 함
+            }
         }
-        return false;
+
+        // Epic Knights 호환 로직
+        if (com.talhanation.recruits.Main.isEpicKnightsLoaded && recruit.blockCoolDown == 0) {
+            boolean noItemInOffhand = offhand.isEmpty();
+            boolean canBlockWithItem = this.recruit.getMainHandItem().getDescriptionId().contains("magistu");
+            if (canBlockWithItem && shouldBlock() && !recruit.isFollowing() && recruit.canBlock() 
+                && !recruit.getShouldMovePos() && noItemInOffhand && !this.recruit.swinging) {
+                return true;
+            }
+        }
+
+        // 일반 방패 로직
+        return !offhand.isEmpty() && offhand.getItem() instanceof net.minecraft.world.item.ShieldItem 
+                && shouldBlock() && recruit.canBlock() && !recruit.isFollowing() 
+                && !recruit.getShouldMovePos() && !this.recruit.swinging;
     }
 
     public boolean canContinueToUse() {

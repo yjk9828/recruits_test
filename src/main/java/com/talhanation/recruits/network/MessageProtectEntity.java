@@ -15,13 +15,13 @@ public class MessageProtectEntity implements Message<MessageProtectEntity> {
 
     private UUID uuid;
     private UUID target;
-    private UUID group;
+    private int group;
 
     public MessageProtectEntity(){
 
     }
 
-    public MessageProtectEntity(UUID uuid, UUID target, UUID group) {
+    public MessageProtectEntity(UUID uuid, UUID target, int group) {
         this.uuid = uuid;
         this.target = target;
         this.group = group;
@@ -42,14 +42,14 @@ public class MessageProtectEntity implements Message<MessageProtectEntity> {
     public MessageProtectEntity fromBytes(FriendlyByteBuf buf) {
         this.uuid = buf.readUUID();
         this.target = buf.readUUID();
-        this.group = buf.readUUID();
+        this.group = buf.readInt();
         return this;
     }
 
     public void toBytes(FriendlyByteBuf buf) {
         buf.writeUUID(uuid);
         buf.writeUUID(target);
-        buf.writeUUID(group);
+        buf.writeInt(group);
     }
 
 }

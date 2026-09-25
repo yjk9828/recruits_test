@@ -1,6 +1,7 @@
 package com.talhanation.recruits.client.gui.player;
 
 import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.blaze3d.vertex.PoseStack;
 import com.talhanation.recruits.client.gui.component.BannerRenderer;
 import com.talhanation.recruits.client.gui.widgets.ListScreenEntryBase;
 import com.talhanation.recruits.client.gui.widgets.ListScreenListBase;
@@ -19,18 +20,16 @@ public class RecruitsPlayerEntry extends ListScreenEntryBase<RecruitsPlayerEntry
     protected static final int BG_FILL_HOVERED = FastColor.ARGB32.color(255, 100, 100, 100);
     protected static final int BG_FILL_SELECTED = FastColor.ARGB32.color(255, 10, 10, 10);
     protected static final int PLAYER_NAME_COLOR = FastColor.ARGB32.color(255, 255, 255, 255);
-    protected static final int PLAYER_NAME_COLOR_OFFLINE = FastColor.ARGB32.color(255, 140, 140, 140);
 
     protected final Minecraft minecraft;
     protected final IPlayerSelection screen;
     protected final @NotNull RecruitsPlayerInfo player;
     protected final BannerRenderer bannerRenderer;
-
     public RecruitsPlayerEntry(IPlayerSelection screen, @NotNull RecruitsPlayerInfo player) {
         this.minecraft = Minecraft.getInstance();
         this.screen = screen;
         this.player = player;
-        this.bannerRenderer = new BannerRenderer(player.getFaction());
+        this.bannerRenderer = new BannerRenderer(player.getRecruitsTeam());
     }
 
     @Override
@@ -55,23 +54,17 @@ public class RecruitsPlayerEntry extends ListScreenEntryBase<RecruitsPlayerEntry
             guiGraphics.fill(left, top, left + width, top + height, BG_FILL);
         }
 
-        int nameColor = player.isOnline() ? PLAYER_NAME_COLOR : PLAYER_NAME_COLOR_OFFLINE;
-
         RenderSystem.setShaderTexture(0, GameProfileUtils.getSkin(player.getUUID()));
         guiGraphics.blit(GameProfileUtils.getSkin(player.getUUID()), skinX, skinY, SKIN_SIZE, SKIN_SIZE, 8, 8, 8, 8, 64, 64);
         RenderSystem.enableBlend();
         guiGraphics.blit(GameProfileUtils.getSkin(player.getUUID()), skinX, skinY, SKIN_SIZE, SKIN_SIZE, 40, 8, 8, 8, 64, 64);
-        if (!player.isOnline()) {
-            guiGraphics.fill(skinX, skinY, skinX + SKIN_SIZE, skinY + SKIN_SIZE, FastColor.ARGB32.color(120, 0, 0, 0));
-        }
         RenderSystem.disableBlend();
-        guiGraphics.drawString(minecraft.font, player.getName(), (float) textX, (float) textY, nameColor, false);
+        guiGraphics.drawString(minecraft.font, player.getName(), (float) textX, (float) textY, PLAYER_NAME_COLOR, false);
 
         if(bannerRenderer != null){
             bannerRenderer.renderBanner(guiGraphics, left + 185, top, width, height, 15);
         }
     }
-
     @NotNull
     public RecruitsPlayerInfo getPlayerInfo() {
         return player;

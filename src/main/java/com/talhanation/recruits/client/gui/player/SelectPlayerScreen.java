@@ -1,10 +1,11 @@
 package com.talhanation.recruits.client.gui.player;
 
 import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.blaze3d.vertex.PoseStack;
 import com.talhanation.recruits.Main;
-import com.talhanation.recruits.client.ClientManager;
 import com.talhanation.recruits.client.gui.widgets.ListScreenBase;
 import com.talhanation.recruits.client.gui.widgets.ListScreenListBase;
+import com.talhanation.recruits.network.MessageToServerRequestUpdatePlayerList;
 import com.talhanation.recruits.world.RecruitsPlayerInfo;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
@@ -41,14 +42,16 @@ public class SelectPlayerScreen extends ListScreenBase implements IPlayerSelecti
     protected Screen parent;
     public RecruitsPlayerInfo selected;
     private Button backButton;
-    protected Button actionButton; // protected so subclasses (e.g. EmbargoScreen) can replace it
+    private Button actionButton;
     private final Consumer<RecruitsPlayerInfo> buttonAction;
-    protected final Player player;
+    private final Player player;
     private final boolean includeSelf;
     private final PlayersList.FilterType filterType;
 
     private int gapTop;
     private int gapBottom;
+    private int refreshTime = 20;
+
 
     public SelectPlayerScreen(Screen parent, Player player, Component title, Component buttonText, Component buttonTooltip, boolean includeSelf, PlayersList.FilterType filterType, Consumer<RecruitsPlayerInfo> buttonAction){
         super(title,236,0);
@@ -59,7 +62,9 @@ public class SelectPlayerScreen extends ListScreenBase implements IPlayerSelecti
         this.filterType = filterType;
         BUTTON_TEXT = buttonText;
         TOOLTIP_BUTTON = buttonTooltip;
+        Main.SIMPLE_CHANNEL.sendToServer(new MessageToServerRequestUpdatePlayerList());
     }
+
 
     @Override
     protected void init() {
@@ -80,7 +85,6 @@ public class SelectPlayerScreen extends ListScreenBase implements IPlayerSelecti
         } else {
             playerList = new PlayersList(width, height, guiTop + HEADER_SIZE + SEARCH_HEIGHT, guiTop + HEADER_SIZE + units * UNIT_SIZE, CELL_HEIGHT, this, filterType, player, includeSelf);
         }
-
         String string = searchBox != null ? searchBox.getValue() : "";
         searchBox = new EditBox(font, guiLeft + 8, guiTop + HEADER_SIZE, 220, SEARCH_HEIGHT, Component.literal("SEARCH_HINT"));
         searchBox.setMaxLength(16);
@@ -102,8 +106,8 @@ public class SelectPlayerScreen extends ListScreenBase implements IPlayerSelecti
         actionButton = new ExtendedButton(guiLeft + 7, buttonY, 100, 20, BUTTON_TEXT,
                 button -> {
                 buttonAction.accept(selected);
-
-                if(ClientManager.ownFaction != null) ClientManager.ownFaction.removeJoinRequest(selected.getName());
+                PlayersList.onlinePlayers.remove(selected);
+                if(playerList.recruitsTeam != null) playerList.recruitsTeam.removeJoinRequest(selected.getName());
                 this.playerList.setFocused(null);
                 this.playerList.updateEntryList();
                 this.selected = null;
@@ -118,8 +122,18 @@ public class SelectPlayerScreen extends ListScreenBase implements IPlayerSelecti
     @Override
     public void tick() {
         super.tick();
-        if (searchBox != null)  searchBox.tick();
-        if (playerList != null) playerList.tick();
+        if(searchBox != null){
+            searchBox.tick();
+        }
+
+        if(playerList != null){
+            playerList.tick();
+        }
+
+        if(--refreshTime <= 0){
+            refreshTime = 20;
+            Main.SIMPLE_CHANNEL.sendToServer(new MessageToServerRequestUpdatePlayerList());
+        }
     }
 
     @Override
@@ -128,6 +142,7 @@ public class SelectPlayerScreen extends ListScreenBase implements IPlayerSelecti
         this.selected = null;
         this.playerList.setFocused(null);
         this.actionButton.active = false;
+
         return flag;
     }
 
@@ -149,7 +164,7 @@ public class SelectPlayerScreen extends ListScreenBase implements IPlayerSelecti
 
     @Override
     public void renderForeground(GuiGraphics guiGraphics, int mouseX, int mouseY, float delta) {
-        guiGraphics.drawString(font, this.getTitle(), width / 2 - font.width(this.getTitle()) / 2, guiTop + 5, 4210752, false);
+        guiGraphics.drawString(font, this.getTitle(), width / 2 - font.width(TITLE) / 2, guiTop + 5, 4210752, false);
 
         if (!playerList.isEmpty()) {
             playerList.render(guiGraphics, mouseX, mouseY, delta);
@@ -175,8 +190,10 @@ public class SelectPlayerScreen extends ListScreenBase implements IPlayerSelecti
         boolean flag = super.mouseClicked(x, y, z);
         if(this.playerList.getFocused() != null){
             this.selected = this.playerList.getFocused().getPlayerInfo();
+
             this.actionButton.active = true;
         }
+
         return flag;
     }
 
@@ -184,12 +201,10 @@ public class SelectPlayerScreen extends ListScreenBase implements IPlayerSelecti
     public Component getTitle() {
         return title;
     }
-
     @Override
     public RecruitsPlayerInfo getSelected() {
         return selected;
     }
-
     @Override
     public ListScreenListBase<RecruitsPlayerEntry> getPlayerList() {
         return playerList;

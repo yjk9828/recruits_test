@@ -9,25 +9,13 @@ import java.nio.file.Path;
 
 @Mod.EventBusSubscriber
 public class RecruitsClientConfig {
-    public enum MapPlayerIconStyle {
-        VANILLA,
-        OVERHAULED
-    }
-
     private static final ForgeConfigSpec.Builder BUILDER = new ForgeConfigSpec.Builder();
     public static ForgeConfigSpec CLIENT;
     public static ForgeConfigSpec.BooleanValue PlayVillagerAmbientSound;
     public static ForgeConfigSpec.BooleanValue CommandScreenToggle;
     public static ForgeConfigSpec.BooleanValue RecruitsLookLikeVillagers;
     public static ForgeConfigSpec.BooleanValue UpdateCheckerClientside;
-    public static ForgeConfigSpec.BooleanValue DisableClaimGUIOverlay;
-    public static ForgeConfigSpec.BooleanValue UpdateMapTiles;
-    public static ForgeConfigSpec.BooleanValue WorldMapUpdateAroundPlayer;
-    public static ForgeConfigSpec.BooleanValue WorldMapNightShading;
-    public static ForgeConfigSpec.BooleanValue WorldMapShowCoordinates;
-    public static ForgeConfigSpec.BooleanValue WorldMapClaimFill;
-    public static ForgeConfigSpec.BooleanValue RecruitsToasts;
-    public static ForgeConfigSpec.EnumValue<MapPlayerIconStyle> WorldMapPlayerIconStyle;
+
 
     static{
         BUILDER.comment("Recruits Config Client Side:").push("RecruitsClientSide");
@@ -58,16 +46,6 @@ public class RecruitsClientConfig {
                 .worldRestart()
                 .define("CommandScreenToggle", false);
 
-        RecruitsToasts = BUILDER.comment("""
-                        ----RecruitsToasts----
-                        \t(takes effect after restart)
-                        \t
-                        Should important events be shown on the HUD by toast notifications?""
-                        default: true""")
-
-                .worldRestart()
-                .define("RecruitsToasts", true);
-
         UpdateCheckerClientside = BUILDER.comment("""
                         ----UpdateCheckerClientside----
                         \t(takes effect after restart)
@@ -78,56 +56,6 @@ public class RecruitsClientConfig {
 
                 .worldRestart()
                 .define("UpdateCheckerClientside", true);
-
-        DisableClaimGUIOverlay = BUILDER.comment("""
-                        ----DisableClaimGUIOverlay----
-                        \t(takes effect after restart)
-                        \t
-                        Should the GUI overlay with claim informations be disabled?""
-                        default: false""")
-
-                .worldRestart()
-                .define("DisableClaimGUIOverlay", false);
-
-        UpdateMapTiles = BUILDER.comment("""
-                        ----UpdateMapTiles----
-                        \t(takes effect after restart)
-                        \t
-                        Should the world map tiles be updated while playing?
-                        Disable this if you experience performance issues with the map.""
-                        default: true""")
-                .worldRestart()
-                .define("UpdateMapTiles", true);
-
-        WorldMapUpdateAroundPlayer = BUILDER.comment("""
-                        ----WorldMapUpdateAroundPlayer----
-                        Load and refresh map chunks around the player in the background.
-                        default: true""")
-                .define("WorldMapUpdateAroundPlayer", true);
-
-        WorldMapNightShading = BUILDER.comment("""
-                        ----WorldMapNightShading----
-                        Darken the world map at night.
-                        default: true""")
-                .define("WorldMapNightShading", true);
-
-        WorldMapShowCoordinates = BUILDER.comment("""
-                        ----WorldMapShowCoordinates----
-                        Show the coordinates and zoom readout on the world map.
-                        default: true""")
-                .define("WorldMapShowCoordinates", true);
-
-        WorldMapClaimFill = BUILDER.comment("""
-                        ----WorldMapClaimFill----
-                        Draw the filled territory overlay on the world map.
-                        default: true""")
-                .define("WorldMapClaimFill", true);
-
-        WorldMapPlayerIconStyle = BUILDER.comment("""
-                        ----WorldMapPlayerIconStyle----
-                        Player icon style on the world map.
-                        default: OVERHAULED""")
-                .defineEnum("WorldMapPlayerIconStyle", MapPlayerIconStyle.OVERHAULED);
 
         BUILDER.pop();
         CLIENT = BUILDER.build();

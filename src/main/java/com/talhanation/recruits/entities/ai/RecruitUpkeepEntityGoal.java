@@ -24,7 +24,11 @@ public class RecruitUpkeepEntityGoal extends Goal {
     public boolean messageNotInRange;
     public BlockPos pos;
     public int timeToRecalcPath;
+    
+    // 최적화 변수
     private long lastCanUseCheck;
+    private int checkInterval = 60; // 초기값 3초
+    
     public boolean canResetPaymentTimer = false;
 
     public RecruitUpkeepEntityGoal(AbstractRecruitEntity recruit) {
@@ -33,13 +37,23 @@ public class RecruitUpkeepEntityGoal extends Goal {
 
     @Override
     public boolean canUse() {
-        long i = this.recruit.getCommandSenderWorld().getGameTime();
-        if (i - this.lastCanUseCheck >= 20L) {
-            this.lastCanUseCheck = i;
-
-            return recruit.needsToGetFood() && recruit.getUpkeepUUID() != null;
+        // 1. 배고프지 않으면 가장 먼저 리턴 (가벼운 연산 우선)
+        if (!recruit.needsToGetFood()) {
+            return false;
         }
-        return false;
+
+        long i = this.recruit.getCommandSenderWorld().getGameTime();
+        
+        // 2. 랜덤 쿨타임 적용 (20틱 고정 -> 60~100틱 랜덤)
+        if (i - this.lastCanUseCheck < this.checkInterval) {
+            return false;
+        }
+        
+        this.lastCanUseCheck = i;
+        // 다음 체크는 3초~5초 사이 랜덤한 시점에 수행 (서버 부하 분산)
+        this.checkInterval = 60 + this.recruit.getRandom().nextInt(40);
+
+        return recruit.getUpkeepUUID() != null;
     }
 
     @Override
@@ -70,13 +84,10 @@ public class RecruitUpkeepEntityGoal extends Goal {
 
             if (entity.get() instanceof AbstractHorse horse) {
                 this.container = horse.inventory;
-                //Main.LOGGER.debug("found horse");
             } else if (entity.get() instanceof InventoryCarrier carrier) {
                 this.container = carrier.getInventory();
-                //Main.LOGGER.debug("found carrier");
             } else if (entity.get() instanceof Container containerEntity) {
                 this.container = containerEntity;
-                //Main.LOGGER.debug("found containerEntity");
             }
         }
         else {
@@ -92,17 +103,18 @@ public class RecruitUpkeepEntityGoal extends Goal {
     @Override
     public void tick() {
         super.tick();
-        //Main.LOGGER.debug("searching upkeep entity");
+        
         if (entity.isPresent()) {
             if (--this.timeToRecalcPath <= 0) {
                 this.timeToRecalcPath = this.adjustedTickDelay(10);
                 this.recruit.getNavigation().moveTo(pos.getX(), pos.getY(), pos.getZ(), 1.15D);
             }
 
-
             if (recruit.horizontalCollision || recruit.minorHorizontalCollision) {
                 this.recruit.getJumpControl().jump();
             }
+            
+            // 거리 체크
             double distance = this.recruit.position().distanceToSqr(Vec3.atCenterOf(pos));
             if (distance < 50 && container != null) {
 
@@ -134,7 +146,7 @@ public class RecruitUpkeepEntityGoal extends Goal {
                             }
                         }
                     }
-                    this.stop(); //stop taking food out of the container
+                    this.stop();
                     return;
                 } else {
                     if (recruit.getOwner() != null && message) {
@@ -154,7 +166,6 @@ public class RecruitUpkeepEntityGoal extends Goal {
                 this.stop();
             }
         }
-
     }
 
     private void checkIfMounted(Entity entity) {
@@ -182,9 +193,10 @@ public class RecruitUpkeepEntityGoal extends Goal {
     private Optional<Entity> findEntity() {
         if (this.recruit.getUpkeepUUID() == null) return Optional.empty();
 
+        // 최적화: 검색 범위를 100 -> 40으로 축소 (서버 부하 감소)
         List<Entity> entities = recruit.getCommandSenderWorld().getEntitiesOfClass(
                 Entity.class,
-                recruit.getBoundingBox().inflate(100.0D),
+                recruit.getBoundingBox().inflate(40.0D), 
                 (entity) -> entity.getUUID().equals(recruit.getUpkeepUUID())
         );
 

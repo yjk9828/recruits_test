@@ -1,14 +1,16 @@
 package com.talhanation.recruits.client.gui.component;
 
 import com.mojang.blaze3d.platform.Lighting;
+import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.datafixers.util.Pair;
-import com.talhanation.recruits.world.RecruitsFaction;
+import com.talhanation.recruits.world.RecruitsTeam;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.model.geom.ModelLayers;
 import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.texture.OverlayTexture;
+import net.minecraft.client.renderer.texture.TextureAtlas;
 import net.minecraft.client.resources.model.ModelBakery;
 import net.minecraft.core.Holder;
 import net.minecraft.world.item.BannerItem;
@@ -24,10 +26,10 @@ public class BannerRenderer {
     private List<Pair<Holder<BannerPattern>, DyeColor>> resultBannerPatterns;
     private final ModelPart flag;
     private ItemStack bannerItem;
-    private RecruitsFaction recruitsFaction;
+    private RecruitsTeam recruitsTeam;
     private final Minecraft minecraft;
-    public BannerRenderer(@Nullable RecruitsFaction team) {
-        this.recruitsFaction = team;
+    public BannerRenderer(@Nullable RecruitsTeam team) {
+        this.recruitsTeam = team;
         boolean fail = true;
         if (team != null && team.getBanner() != null){
             ItemStack itemStack = ItemStack.of(team.getBanner());
@@ -54,11 +56,12 @@ public class BannerRenderer {
     }
 
     public void renderBanner(GuiGraphics guiGraphics, int left, int top, int width, int height, int scale0) {
-        if (bannerItem.isEmpty() || this.flag == null || this.resultBannerPatterns == null) return;
+        if (!bannerItem.isEmpty()) {
+            //guiGraphics.blit(left, top, left + width, top + height, 0, 0, 256, 256, null);
+            Lighting.setupForFlatItems();
 
-        Lighting.setupForFlatItems();
-        guiGraphics.pose().pushPose();
-        try {
+            MultiBufferSource.BufferSource bufferSource = Minecraft.getInstance().renderBuffers().bufferSource();
+            guiGraphics.pose().pushPose();
             guiGraphics.pose().translate(left + 10, top + 20, 0.0D);
             guiGraphics.pose().scale(scale0, -scale0, 1.0F);
 
@@ -67,14 +70,9 @@ public class BannerRenderer {
             this.flag.xRot = 0.0F;
             this.flag.y = -32.0F;
 
-            MultiBufferSource.BufferSource bufferSource = Minecraft.getInstance().renderBuffers().bufferSource();
-            net.minecraft.client.renderer.blockentity.BannerRenderer.renderPatterns(
-                    guiGraphics.pose(), bufferSource, 15728880, OverlayTexture.NO_OVERLAY,
-                    this.flag, ModelBakery.BANNER_BASE, true, this.resultBannerPatterns);
-            bufferSource.endBatch();
-        } finally {
+            net.minecraft.client.renderer.blockentity.BannerRenderer.renderPatterns(guiGraphics.pose(), bufferSource, 15728880, OverlayTexture.NO_OVERLAY, this.flag, ModelBakery.BANNER_BASE, true, this.resultBannerPatterns);
             guiGraphics.pose().popPose();
-            Lighting.setupFor3DItems();
+            bufferSource.endBatch();
         }
     }
 
@@ -85,23 +83,9 @@ public class BannerRenderer {
         }
     }
 
-    public void setRecruitsFaction(RecruitsFaction faction){
-        if (faction == null || faction.getBanner() == null) {
-            this.recruitsFaction = null;
-            this.bannerItem = ItemStack.EMPTY;
-            this.resultBannerPatterns = List.of();
-            return;
-        }
-
-        this.recruitsFaction = faction;
-        ItemStack itemStack = ItemStack.of(faction.getBanner());
-        if (itemStack.getItem() instanceof BannerItem bannerItem) {
-            this.bannerItem = itemStack;
-            this.resultBannerPatterns =
-                    BannerBlockEntity.createPatterns(bannerItem.getColor(), BannerBlockEntity.getItemPatterns(this.bannerItem));
-        } else {
-            this.bannerItem = ItemStack.EMPTY;
-            this.resultBannerPatterns = List.of();
-        }
+    public void setRecruitsTeam(RecruitsTeam team){
+        this.recruitsTeam = team;
+        this.bannerItem = ItemStack.of(team.getBanner());
+        this.resultBannerPatterns = BannerBlockEntity.createPatterns(((BannerItem) this.bannerItem.getItem()).getColor(), BannerBlockEntity.getItemPatterns(this.bannerItem));
     }
 }

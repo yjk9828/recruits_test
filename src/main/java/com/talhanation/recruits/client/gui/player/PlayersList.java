@@ -1,10 +1,9 @@
 package com.talhanation.recruits.client.gui.player;
 
 import com.google.common.collect.Lists;
-import com.talhanation.recruits.client.ClientManager;
 import com.talhanation.recruits.client.gui.widgets.ListScreenListBase;
-import com.talhanation.recruits.world.RecruitsFaction;
 import com.talhanation.recruits.world.RecruitsPlayerInfo;
+import com.talhanation.recruits.world.RecruitsTeam;
 import net.minecraft.world.entity.player.Player;
 
 import java.util.*;
@@ -16,8 +15,11 @@ public class PlayersList extends ListScreenListBase<RecruitsPlayerEntry> {
     protected final List<RecruitsPlayerEntry> entries;
     protected String filter;
     protected final PlayersList.FilterType filterType;
+    public static List<RecruitsPlayerInfo> onlinePlayers;
     public final Player player;
+    public RecruitsTeam recruitsTeam;
     protected final boolean includeSelf;
+
 
     public PlayersList(int width, int height, int x, int y, int size, IPlayerSelection screen, PlayersList.FilterType filterType, Player player, boolean includeSelf) {
         super(width, height, x, y, size);
@@ -33,82 +35,36 @@ public class PlayersList extends ListScreenListBase<RecruitsPlayerEntry> {
     }
 
     public void tick() {
-        if(ClientManager.onlinePlayers != null){
+        if(onlinePlayers != null){
             updateEntryList();
         }
     }
 
     public void updateEntryList() {
         entries.clear();
+        this.recruitsTeam = this.getRecruitsTeam();
 
-        switch (filterType) {
-            case SAME_TEAM -> {
-                if (ClientManager.ownFaction != null) {
-                    Set<UUID> onlineUUIDs = new HashSet<>();
-                    for (RecruitsPlayerInfo online : ClientManager.onlinePlayers) {
-                        onlineUUIDs.add(online.getUUID());
-                    }
-                    for (RecruitsPlayerInfo member : ClientManager.ownFaction.getMembers()) {
-                        if (includeSelf || !member.getUUID().equals(this.player.getUUID())) {
-                            member.setOnline(onlineUUIDs.contains(member.getUUID()));
-                            entries.add(new RecruitsPlayerEntry(screen, member));
-                        }
-                    }
-                }
-            }
-            case EMBARGO -> {
-                if (ClientManager.ownFaction != null) {
-                    String ownTeamID = ClientManager.ownFaction.getStringID();
 
-                    // collect embargoed UUIDs declared by our faction
-                    Set<UUID> embargoedUUIDs = new HashSet<>();
-                    for (Map.Entry<UUID, String> entry : ClientManager.embargoMap.entrySet()) {
-                        if (Arrays.asList(entry.getValue().split(",")).contains(ownTeamID)) {
-                            embargoedUUIDs.add(entry.getKey());
+        for (RecruitsPlayerInfo player : onlinePlayers) {
+
+            if(includeSelf || !player.getUUID().equals(this.player.getUUID())){
+
+                switch (filterType){
+                    default -> {
+                        entries.add(new RecruitsPlayerEntry(screen, player));
+                    }
+                    case SAME_TEAM -> {
+                        RecruitsTeam recruitsTeam = player.getRecruitsTeam();
+
+						// [FIX] this.recruitsTeam != null 조건을 추가하여 안전장치 마련
+                        if(recruitsTeam != null && this.recruitsTeam != null && recruitsTeam.getStringID().equals(this.recruitsTeam.getStringID())){
+                            entries.add(new RecruitsPlayerEntry(screen, player));
                         }
                     }
 
-                    // build UUID -> RecruitsPlayerInfo from all known faction members (online + offline)
-                    // create a new RecruitsPlayerInfo with the faction reference so the banner renders
-                    Map<UUID, RecruitsPlayerInfo> knownPlayers = new HashMap<>();
-                    for (RecruitsFaction faction : ClientManager.factions) {
-                        for (RecruitsPlayerInfo member : faction.getMembers()) {
-                            knownPlayers.put(member.getUUID(), new RecruitsPlayerInfo(member.getUUID(), member.getName(), faction));
-                        }
-                    }
-
-                    // mark online status
-                    Set<UUID> onlineUUIDs = new HashSet<>();
-                    for (RecruitsPlayerInfo online : ClientManager.onlinePlayers) {
-                        onlineUUIDs.add(online.getUUID());
-                    }
-
-                    for (UUID embargoedUUID : embargoedUUIDs) {
-                        RecruitsPlayerInfo info = knownPlayers.get(embargoedUUID);
-                        if (info != null) {
-                            info.setOnline(onlineUUIDs.contains(embargoedUUID));
-                            entries.add(new RecruitsPlayerEntry(screen, info));
-                        }
-                    }
-                }
-            }
-            default -> {
-                for (RecruitsPlayerInfo playerInfo : ClientManager.onlinePlayers) {
-                    if (includeSelf || !playerInfo.getUUID().equals(this.player.getUUID())) {
-                        switch (filterType) {
-                            default -> entries.add(new RecruitsPlayerEntry(screen, playerInfo));
-
-                            case TEAM_JOIN_REQUEST -> {
-                                if (ClientManager.ownFaction != null && ClientManager.ownFaction.getJoinRequests().contains(playerInfo.getName())) {
-                                    entries.add(new RecruitsPlayerEntry(screen, playerInfo));
-                                }
-                            }
-
-                            case ANY_TEAM -> {
-                                if (playerInfo.getFaction() != null) {
-                                    entries.add(new RecruitsPlayerEntry(screen, playerInfo));
-                                }
-                            }
+                    case TEAM_JOIN_REQUEST -> {
+                        if(this.recruitsTeam != null && this.recruitsTeam.getJoinRequests().contains(player.getName())){
+                            entries.add(new RecruitsPlayerEntry(screen, player));
                         }
                     }
                 }
@@ -118,21 +74,34 @@ public class PlayersList extends ListScreenListBase<RecruitsPlayerEntry> {
         updateFilter();
     }
 
+    private RecruitsTeam getRecruitsTeam() {
+        RecruitsTeam recruitsTeam = null;
+        for (RecruitsPlayerInfo player : onlinePlayers) {
+            if(player.getUUID().equals(this.player.getUUID())){
+                recruitsTeam = player.getRecruitsTeam();
+                break;
+            }
+        }
+        return recruitsTeam;
+    }
+
     public void updateFilter() {
         clearEntries();
         List<RecruitsPlayerEntry> filteredEntries = new ArrayList<>(entries);
         if (!filter.isEmpty()) {
-            filteredEntries.removeIf(playerEntry ->
-                    playerEntry.getPlayerInfo() == null || !playerEntry.getPlayerInfo().getName().toLowerCase(Locale.ROOT).contains(filter));
+            filteredEntries.removeIf(playerEntry -> {
+                return playerEntry.getPlayerInfo() == null || !playerEntry.getPlayerInfo().getName().toLowerCase(Locale.ROOT).contains(filter);
+            });
         }
 
         filteredEntries.sort((e1, e2) -> {
             if (!e1.getClass().equals(e2.getClass())) {
-                return e1 instanceof RecruitsPlayerEntry ? 1 : -1;
+                if (e1 instanceof RecruitsPlayerEntry) {
+                    return 1;
+                } else {
+                    return -1;
+                }
             }
-            boolean o1online = e1.getPlayerInfo() != null && e1.getPlayerInfo().isOnline();
-            boolean o2online = e2.getPlayerInfo() != null && e2.getPlayerInfo().isOnline();
-            if (o1online != o2online) return o1online ? -1 : 1;
             return volumeEntryToString(e1).compareToIgnoreCase(volumeEntryToString(e2));
         });
 
@@ -159,8 +128,6 @@ public class PlayersList extends ListScreenListBase<RecruitsPlayerEntry> {
     public enum FilterType{
         NONE,
         SAME_TEAM,
-        TEAM_JOIN_REQUEST,
-        ANY_TEAM,
-        EMBARGO
+        TEAM_JOIN_REQUEST
     }
 }

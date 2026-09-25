@@ -1,9 +1,7 @@
 package com.talhanation.recruits;
 
-import com.talhanation.recruits.client.gui.overlay.ClaimOverlayManager;
 import com.talhanation.recruits.client.events.CommandCategoryManager;
 import com.talhanation.recruits.client.events.KeyEvents;
-import com.talhanation.recruits.client.events.ClientPlayerEvents;
 import com.talhanation.recruits.client.gui.commandscreen.CombatCategory;
 import com.talhanation.recruits.client.gui.commandscreen.MovementCategory;
 import com.talhanation.recruits.client.gui.commandscreen.OtherCategory;
@@ -16,6 +14,7 @@ import com.talhanation.recruits.init.ModBlocks;
 import com.talhanation.recruits.init.ModEntityTypes;
 import com.talhanation.recruits.init.ModItems;
 import com.talhanation.recruits.init.ModScreens;
+import com.talhanation.recruits.network.MessageServerSavePlayerGroups;
 import com.talhanation.recruits.init.*;
 import com.talhanation.recruits.network.*;
 import de.maxhenkel.corelib.CommonRegistry;
@@ -27,7 +26,9 @@ import net.minecraftforge.event.BuildCreativeModeTabContentsEvent;
 import net.minecraftforge.event.RegisterCommandsEvent;
 import net.minecraftforge.eventbus.api.IEventBus;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
-import net.minecraftforge.fml.*;
+import net.minecraftforge.fml.DistExecutor;
+import net.minecraftforge.fml.ModList;
+import net.minecraftforge.fml.ModLoadingContext;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.config.ModConfig;
 import net.minecraftforge.fml.event.lifecycle.FMLClientSetupEvent;
@@ -47,7 +48,6 @@ public class Main {
     public static boolean isSmallShipsLoaded;
     public static boolean isSmallShipsCompatible;
     public static boolean isSiegeWeaponsLoaded;
-    public static boolean isSiegeWeaponsCompatible;
     public static boolean isEpicKnightsLoaded;
     public static boolean isCorpseLoaded;
     public static boolean isRPGZLoaded;
@@ -92,10 +92,9 @@ public class Main {
         MinecraftForge.EVENT_BUS.register(new PillagerEvents());
         MinecraftForge.EVENT_BUS.register(new CommandEvents());
         MinecraftForge.EVENT_BUS.register(new DebugEvents());
-        MinecraftForge.EVENT_BUS.register(new FactionEvents());
+        MinecraftForge.EVENT_BUS.register(new TeamEvents());
         MinecraftForge.EVENT_BUS.register(new DamageEvent());
         MinecraftForge.EVENT_BUS.register(new UpdateChecker());
-        MinecraftForge.EVENT_BUS.register(new ClaimEvents());
         MinecraftForge.EVENT_BUS.register(this);
 
         SIMPLE_CHANNEL = CommonRegistry.registerChannel(Main.MOD_ID, "default");
@@ -132,6 +131,7 @@ public class Main {
                 MessageLeaveTeam.class,
                 MessageTeamMainScreen.class,
                 MessageOpenTeamInspectionScreen.class,
+                MessageServerUpdateTeamInspectMenu.class,
                 MessageOpenTeamListScreen.class,
                 MessageAddPlayerToTeam.class,
                 MessageOpenTeamAddPlayerScreen.class,
@@ -139,11 +139,12 @@ public class Main {
                 MessageSendJoinRequestTeam.class,
                 MessageRemoveFromTeam.class,
                 MessageOpenDisbandScreen.class,
-                MessageAssignRecruitToPlayer.class,
+                MessageAssignToTeamMate.class,
+                MessageToClientUpdateCommandScreen.class,
                 MessageWriteSpawnEgg.class,
                 MessageBackToMountEntity.class,
                 MessageDisbandGroup.class,
-                MessageAssignGroupToPlayer.class,
+                MessageAssignGroupToTeamMate.class,
                 MessagePromoteRecruit.class,
                 MessageOpenPromoteScreen.class,
                 MessageOpenSpecialScreen.class,
@@ -157,58 +158,40 @@ public class Main {
                 MessagePatrolLeaderSetInfoMode.class,
                 MessageAssignGroupToCompanion.class,
                 MessagePatrolLeaderSetPatrollingSpeed.class,
-                MessageToClientUpdateHireState.class,
+                MessageToClientUpdateHireScreen.class,
+                MessageToClientUpdateTeamEditScreen.class,
                 MessageRemoveAssignedGroupFromCompanion.class,
                 MessageAnswerMessenger.class,
                 MessageToClientOpenMessengerAnswerScreen.class,
                 MessageClearUpkeepGui.class,
+                MessageToServerRequestUpdateGroupList.class,
                 MessageApplyNoGroup.class,
-                MessageToClientUpdateGroups.class,
-                MessagePatrolLeaderSetRoute.class,
-                MessagePatrolLeaderSetEnemyAction.class,
-                MessageSetLeaderGroup.class,
-                MessageTransferRoute.class,
-                MessageToClientReceiveRoute.class,
+                MessageServerSavePlayerGroups.class,
+                MessageToClientUpdateGroupList.class,
+                MessageToClientUpdateRecruitInventoryScreen.class,
                 MessageFormationFollowMovement.class,
                 MessageRest.class,
                 MessageRangedFire.class,
                 MessageSaveFormationFollowMovement.class,
                 MessageClearUpkeep.class,
-                MessageToClientUpdateFactions.class,
-                MessageToClientUpdateOnlinePlayers.class,
-                MessageChangeDiplomacyStatus.class,
+                MessageToServerRequestUpdateTeamList.class,
+                MessageToClientUpdateTeamList.class,
+                MessageToServerRequestUpdatePlayerList.class,
+                MessageToClientUpdatePlayerList.class,
+                MessageDiplomacyChangeStatus.class,
                 MessageToClientSetToast.class,
                 MessageToClientUpdateDiplomacyList.class,
+                MessageToServerRequestUpdateDiplomacyList.class,
+                MessageToClientUpdateTeamInspection.class,
+                MessageToServerRequestUpdateTeamInspaction.class,
                 MessageSaveTeamSettings.class,
                 MessageToClientSetDiplomaticToast.class,
                 MessageScoutTask.class,
+                MessageToServerRequestUpdatePlayerCurrencyCount.class,
+                MessageToClientUpdatePlayerCurrencyCount.class,
                 MessageToClientOpenTakeOverScreen.class,
-                MessageToClientUpdateClaims.class,
-                MessageUpdateClaim.class,
-                MessageDoPayment.class,
-                MessageToClientUpdateClaim.class,
-                MessageToClientUpdateOwnFaction.class,
-                MessageDeleteClaim.class,
-                MessageToClientOpenNobleTradeScreen.class,
-                MessageHireFromNobleVillager.class,
-                MessageAttack.class,
-                MessageToClientUpdateUnitInfo.class,
-                MessageUpdateGroup.class,
-                MessageMergeGroup.class,
-                MessageSplitGroup.class,
-                MessageAssignNearbyRecruitsInGroup.class,
-                MessageTeleportPlayer.class,
-                MessageSendTreaty.class,
-                MessageAnswerTreaty.class,
-                MessageToClientOpenTreatyAnswerScreen.class,
-                MessageToClientUpdateTreaties.class,
-                MessageFaceCommand.class,
-                MessageSetTargetPrio.class,
-                MessageAddEmbargo.class,
-                MessageRemoveEmbargo.class,
-                MessageToClientUpdateEmbargoes.class,
-                MessageAddEmbargoFaction.class,
-                MessageToClientWorldMapIdentity.class
+                MessageToClientOpenMessengerAnswerScreen.class,
+				MessageTogglePvP.class
         };
 
 
@@ -226,14 +209,8 @@ public class Main {
 
         isSmallShipsCompatible = false;
         if(isSmallShipsLoaded){
-            String smallshipsversion = ModList.get().getModFileById("smallships").versionString();
-            isSmallShipsCompatible = isVersionAtLeast(smallshipsversion, "2.0.0-b1.4");
-        }
-
-        isSiegeWeaponsCompatible = false;
-        if(isSiegeWeaponsLoaded){
-            String siegeweaponsVersion = ModList.get().getModFileById("siegeweapons").versionString();
-            isSiegeWeaponsCompatible = isVersionAtLeast(siegeweaponsVersion, "0.2.5");
+            String smallshipsversion = ModList.get().getModFileById("smallships").versionString();//2.0.0-a2.3.1 above shall be supported e.g.: "2.0.0-b1.1"
+            isSmallShipsCompatible = smallshipsversion.contains("2.0.0-b1.3")||smallshipsversion.contains("2.0.0-b1.4");//TODO: Better Version check for compatible smallships versions
         }
     }
 
@@ -242,12 +219,9 @@ public class Main {
     public void clientSetup(FMLClientSetupEvent event) {
         event.enqueueWork(ModScreens::registerMenus);
         MinecraftForge.EVENT_BUS.register(new KeyEvents());
-        MinecraftForge.EVENT_BUS.register(new ClientPlayerEvents());
-        MinecraftForge.EVENT_BUS.register(new ClaimOverlayManager());
-
-        CommandCategoryManager.register(new MovementCategory(), -2);
-        CommandCategoryManager.register(new CombatCategory(), -3);
-        CommandCategoryManager.register(new OtherCategory(), -1);
+        CommandCategoryManager.register(new MovementCategory());
+        CommandCategoryManager.register(new CombatCategory());
+        CommandCategoryManager.register(new OtherCategory());
     }
 
     private void addCreativeTabs(BuildCreativeModeTabContentsEvent event) {
@@ -258,7 +232,6 @@ public class Main {
             event.accept(ModItems.NOMAD_SPAWN_EGG.get());
             event.accept(ModItems.HORSEMAN_SPAWN_EGG.get());
             event.accept(ModItems.CROSSBOWMAN_SPAWN_EGG.get());
-            event.accept(ModItems.VILLAGER_NOBLE_SPAWN_EGG.get());
         }
 
         if (event.getTabKey().equals(CreativeModeTabs.FUNCTIONAL_BLOCKS)){
@@ -269,26 +242,5 @@ public class Main {
             event.accept(ModBlocks.HORSEMAN_BLOCK.get());
             event.accept(ModBlocks.NOMAD_BLOCK.get());
         }
-    }
-
-    public static boolean isVersionAtLeast(String installedVersion, String minVersion) {
-        String[] installed = installedVersion.split("[.\\-]", -1);
-        String[] minimum  = minVersion.split("[.\\-]", -1);
-
-        int len = Math.max(installed.length, minimum.length);
-        for (int i = 0; i < len; i++) {
-            String a = i < installed.length ? installed[i] : "0";
-            String b = i < minimum.length  ? minimum[i]   : "0";
-
-            int cmp;
-            try {
-                cmp = Integer.compare(Integer.parseInt(a), Integer.parseInt(b));
-            } catch (NumberFormatException e) {
-                cmp = a.compareTo(b);
-            }
-
-            if (cmp != 0) return cmp > 0;
-        }
-        return true;
     }
 }

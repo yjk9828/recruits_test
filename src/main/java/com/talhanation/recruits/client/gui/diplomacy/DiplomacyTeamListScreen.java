@@ -1,12 +1,11 @@
 package com.talhanation.recruits.client.gui.diplomacy;
 import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.blaze3d.vertex.PoseStack;
 import com.talhanation.recruits.Main;
-import com.talhanation.recruits.client.ClientManager;
-import com.talhanation.recruits.client.gui.group.EditOrAddGroupScreen;
 import com.talhanation.recruits.client.gui.widgets.ListScreenBase;
+import com.talhanation.recruits.network.MessageToServerRequestUpdateDiplomacyList;
 import com.talhanation.recruits.world.RecruitsDiplomacyManager;
-import com.talhanation.recruits.world.RecruitsFaction;
-import com.talhanation.recruits.world.RecruitsGroup;
+import com.talhanation.recruits.world.RecruitsTeam;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
@@ -19,9 +18,6 @@ import net.minecraftforge.api.distmarker.OnlyIn;
 import net.minecraftforge.client.gui.widget.ExtendedButton;
 
 import java.util.Locale;
-
-import static com.talhanation.recruits.client.ClientManager.ownFaction;
-
 @OnlyIn(Dist.CLIENT)
 public class DiplomacyTeamListScreen extends ListScreenBase {
 
@@ -43,7 +39,8 @@ public class DiplomacyTeamListScreen extends ListScreenBase {
     protected int units;
 
     protected Screen parent;
-    private RecruitsFaction selected;
+    private RecruitsTeam selected;
+    protected RecruitsTeam ownTeam;
     private Button backButton;
     private Button setStanceButton;
     private final boolean isLeader;
@@ -66,6 +63,8 @@ public class DiplomacyTeamListScreen extends ListScreenBase {
     protected void init() {
         super.init();
         this.clearWidgets();
+
+        Main.SIMPLE_CHANNEL.sendToServer(new MessageToServerRequestUpdateDiplomacyList());
 
         gapTop = (int) (this.height * 0.1);
         gapBottom = (int) (this.height * 0.1);
@@ -109,10 +108,10 @@ public class DiplomacyTeamListScreen extends ListScreenBase {
 
         setStanceButton = new ExtendedButton(guiLeft + 7, buttonY, 100, 20, this.isLeader ? SET_STANCE : SHOW_STANCE,
                 button -> {
-                     minecraft.setScreen(new DiplomacyEditScreen(this, selected));
+                     minecraft.setScreen(new DiplomacyEditScreen(this, ownTeam, selected, list.getRelation(ownTeam.getStringID(), selected.getStringID()), list.getRelation(selected.getStringID(), ownTeam.getStringID()), isLeader));
                      this.selected = null;
                 });
-        setStanceButton.active = this.selected != null && ownFaction != null && ownFaction.getTeamLeaderUUID().equals(this.minecraft.player.getUUID());
+        setStanceButton.active = ownTeam != null && ownTeam.getTeamLeaderUUID().equals(this.minecraft.player.getUUID());
 
         addRenderableWidget(setStanceButton);
 
@@ -162,6 +161,7 @@ public class DiplomacyTeamListScreen extends ListScreenBase {
         neutralsButton.active = diplomacyFilter == DiplomacyTeamList.DiplomacyFilter.NEUTRALS;
 
         list.diplomacyFilter = diplomacyFilter;
+        list.hasUpdated = false;
     }
     @Override
     public void tick() {
@@ -222,43 +222,20 @@ public class DiplomacyTeamListScreen extends ListScreenBase {
         }
     }
 
-    private long lastClickTime = 0;
-    private static final long DOUBLE_CLICK_THRESHOLD = 250;
     @Override
-    public boolean mouseClicked(double x, double y, int button) {
-        if (list != null) list.mouseClicked(x, y, button);
-
-        boolean flag = super.mouseClicked(x, y, button);
-
-        boolean isDoubleClick = false;
-        long now = System.currentTimeMillis();
-
-        if (button == 0) { // Linksklick
-            if (now - lastClickTime <= DOUBLE_CLICK_THRESHOLD) {
-                isDoubleClick = true;
-            }
-            lastClickTime = now;
-        }
-
+    public boolean mouseClicked(double x, double y, int z) {
+        if (list != null) list.mouseClicked(x, y, z);
+        boolean flag = super.mouseClicked(x, y, z);
         if (this.list.getFocused() != null) {
             this.selected = this.list.getFocused().team;
             this.setStanceButton.active = true;
         }
 
-        if (isDoubleClick && this.selected != null) {
-            onDoubleClick(this.selected);
-        }
-
         return flag;
     }
 
-    private void onDoubleClick(RecruitsFaction faction) {
-        minecraft.setScreen(new DiplomacyEditScreen(this, faction));
-        this.selected = null;
-    }
 
-
-    public RecruitsFaction getSelected() {
+    public RecruitsTeam getSelected() {
         return this.selected;
     }
 

@@ -1,11 +1,10 @@
 package com.talhanation.recruits.client.gui.commandscreen;
 
 import com.talhanation.recruits.Main;
-import com.talhanation.recruits.client.ClientManager;
 import com.talhanation.recruits.client.gui.CommandScreen;
 import com.talhanation.recruits.client.gui.group.RecruitsCommandButton;
+import com.talhanation.recruits.client.gui.group.RecruitsGroup;
 import com.talhanation.recruits.network.*;
-import com.talhanation.recruits.world.RecruitsGroup;
 import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
@@ -37,15 +36,9 @@ public class CombatCategory implements ICommandCategory {
     private static final MutableComponent TEXT_HOLD_STRATEGIC_FIRE = Component.translatable("gui.recruits.command.text.hold_strategic_fire");
     private static final MutableComponent TEXT_FIRE_AT_WILL = Component.translatable("gui.recruits.command.text.fire_at_will");
     private static final MutableComponent TEXT_HOLD_FIRE = Component.translatable("gui.recruits.command.text.hold_fire");
-
-    public static final String SPECIAL_HOLD_FIRE = "hold_fire";
-    public static final String SPECIAL_STRATEGIC_FIRE = "strategic_fire";
-    public static final String SPECIAL_SHIELDS_UP = "shields_up";
     private static final MutableComponent TEXT_CLEAR_TARGET = Component.translatable("gui.recruits.command.text.clearTargets");
     private static final MutableComponent TOOLTIP_COMBAT = Component.translatable("gui.recruits.command.tooltip.combat");
 
-    private static final MutableComponent TEXT_ATTACK = Component.translatable("gui.recruits.command.text.attack");
-    private static final MutableComponent TOOLTIP_ATTACK = Component.translatable("gui.recruits.command.tooltip.attack");
     @Override
     public Component getToolTipName() {
         return TOOLTIP_COMBAT;
@@ -58,212 +51,173 @@ public class CombatCategory implements ICommandCategory {
 
     @Override
     public void createButtons(CommandScreen screen, int x, int y, List<RecruitsGroup> groups, Player player) {
-        boolean isOneGroupActive = groups.stream().anyMatch(g -> !g.isDisabled());
+        // 버튼 활성화 여부는 '그룹이 존재하는가'로 단순화 (선택 여부는 클릭 시 판별)
+        boolean isAnyGroupAvailable = groups != null && !groups.isEmpty();
 
-        //STRATEGIC FIRE
-        RecruitsCommandButton strategicFireButton = new RecruitsCommandButton(x, y - 60, TEXT_STRATEGIC_FIRE,
+        // STRATEGIC FIRE
+        RecruitsCommandButton strategicFireButton = new RecruitsCommandButton(x, y - 50, TEXT_STRATEGIC_FIRE,
                 button -> {
-                    if (!groups.isEmpty()) {
-                        for (RecruitsGroup group : groups) {
-                            if (!group.isDisabled()) {
-                                Main.SIMPLE_CHANNEL.sendToServer(new MessageStrategicFire(player.getUUID(), group.getUUID(), true));
-                                ClientManager.addGroupSpecialState(group.getUUID(), SPECIAL_STRATEGIC_FIRE);
-                            }
+                    List<Integer> targetIds = screen.getSelectedGroupIds();
+                    if (!targetIds.isEmpty()) {
+                        for (Integer id : targetIds) {
+                            Main.SIMPLE_CHANNEL.sendToServer(new MessageStrategicFire(player.getUUID(), id, true));
                         }
                         screen.sendCommandInChat(72);
                     }
-
                 });
         strategicFireButton.setTooltip(Tooltip.create(TOOLTIP_STRATEGIC_FIRE));
-        strategicFireButton.active = isOneGroupActive && screen.rayBlockPos != null;
+        strategicFireButton.active = isAnyGroupAvailable && screen.rayBlockPos != null;
         screen.addRenderableWidget(strategicFireButton);
 
-        //HOLD STRATEGIC FIRE
-        RecruitsCommandButton holdStrategicFireButton = new RecruitsCommandButton(x, y - 35, TEXT_HOLD_STRATEGIC_FIRE,
+        // HOLD STRATEGIC FIRE
+        RecruitsCommandButton holdStrategicFireButton = new RecruitsCommandButton(x, y - 25, TEXT_HOLD_STRATEGIC_FIRE,
                 button -> {
-                    if (!groups.isEmpty()) {
-                        for (RecruitsGroup group : groups) {
-                            if (!group.isDisabled()) {
-                                Main.SIMPLE_CHANNEL.sendToServer(new MessageStrategicFire(player.getUUID(), group.getUUID(), false));
-                                ClientManager.removeGroupSpecialState(group.getUUID(), SPECIAL_STRATEGIC_FIRE);
-                            }
+                    List<Integer> targetIds = screen.getSelectedGroupIds();
+                    if (!targetIds.isEmpty()) {
+                        for (Integer id : targetIds) {
+                            Main.SIMPLE_CHANNEL.sendToServer(new MessageStrategicFire(player.getUUID(), id, false));
                         }
                         screen.sendCommandInChat(73);
                     }
-
                 });
         holdStrategicFireButton.setTooltip(Tooltip.create(TOOLTIP_HOLD_STRATEGIC_FIRE));
-        holdStrategicFireButton.active = isOneGroupActive;
+        holdStrategicFireButton.active = isAnyGroupAvailable;
         screen.addRenderableWidget(holdStrategicFireButton);
 
-        //FIRE AT WILL
+        // FIRE AT WILL
         RecruitsCommandButton fireAtWillButton = new RecruitsCommandButton(x + 100, y - 38, TEXT_FIRE_AT_WILL,
                 button -> {
-                    if (!groups.isEmpty()) {
-                        for (RecruitsGroup group : groups) {
-                            if (!group.isDisabled()) {
-                                Main.SIMPLE_CHANNEL.sendToServer(new MessageRangedFire(player.getUUID(), group.getUUID(), true));
-                                ClientManager.removeGroupSpecialState(group.getUUID(), SPECIAL_HOLD_FIRE);
-                            }
+                    List<Integer> targetIds = screen.getSelectedGroupIds();
+                    if (!targetIds.isEmpty()) {
+                        for (Integer id : targetIds) {
+                            Main.SIMPLE_CHANNEL.sendToServer(new MessageRangedFire(player.getUUID(), id, true));
                         }
                         screen.sendCommandInChat(70);
                     }
                 });
         fireAtWillButton.setTooltip(Tooltip.create(TOOLTIP_FIRE_AT_WILL));
-        fireAtWillButton.active = isOneGroupActive;
+        fireAtWillButton.active = isAnyGroupAvailable;
         screen.addRenderableWidget(fireAtWillButton);
 
-        //HOLD FIRE
+        // HOLD FIRE
         RecruitsCommandButton holdFireButton = new RecruitsCommandButton(x + 100, y - 13, TEXT_HOLD_FIRE,
                 button -> {
-                    if (!groups.isEmpty()) {
-                        for (RecruitsGroup group : groups) {
-                            if (!group.isDisabled()) {
-                                Main.SIMPLE_CHANNEL.sendToServer(new MessageStrategicFire(player.getUUID(), group.getUUID(), false));
-                                Main.SIMPLE_CHANNEL.sendToServer(new MessageRangedFire(player.getUUID(), group.getUUID(), false));
-                                ClientManager.addGroupSpecialState(group.getUUID(), SPECIAL_HOLD_FIRE);
-                                ClientManager.removeGroupSpecialState(group.getUUID(), SPECIAL_STRATEGIC_FIRE);
-                            }
+                    List<Integer> targetIds = screen.getSelectedGroupIds();
+                    if (!targetIds.isEmpty()) {
+                        for (Integer id : targetIds) {
+                            Main.SIMPLE_CHANNEL.sendToServer(new MessageStrategicFire(player.getUUID(), id, false));
+                            Main.SIMPLE_CHANNEL.sendToServer(new MessageRangedFire(player.getUUID(), id, false));
                         }
                         screen.sendCommandInChat(71);
                     }
                 });
         holdFireButton.setTooltip(Tooltip.create(TOOLTIP_HOLD_FIRE));
-        holdFireButton.active = isOneGroupActive;
+        holdFireButton.active = isAnyGroupAvailable;
         screen.addRenderableWidget(holdFireButton);
 
-        //SHIELDS UP
+        // SHIELDS UP
         RecruitsCommandButton shieldsUpButton = new RecruitsCommandButton(x + 100, y + 13, TEXT_SHIELDS_UP,
                 button -> {
-                    if (!groups.isEmpty()) {
-                        for (RecruitsGroup group : groups) {
-                            if (!group.isDisabled()) {
-                                Main.SIMPLE_CHANNEL.sendToServer(new MessageShields(player.getUUID(), group.getUUID(), true));
-                                ClientManager.addGroupSpecialState(group.getUUID(), SPECIAL_SHIELDS_UP);
-                            }
+                    List<Integer> targetIds = screen.getSelectedGroupIds();
+                    if (!targetIds.isEmpty()) {
+                        for (Integer id : targetIds) {
+                            Main.SIMPLE_CHANNEL.sendToServer(new MessageShields(player.getUUID(), id, true));
                         }
                         screen.sendCommandInChat(74);
                     }
                 });
         shieldsUpButton.setTooltip(Tooltip.create(TOOLTIP_SHIELDS_UP));
-        shieldsUpButton.active = isOneGroupActive;
+        shieldsUpButton.active = isAnyGroupAvailable;
         screen.addRenderableWidget(shieldsUpButton);
 
-        //SHIELDS DOWN
+        // SHIELDS DOWN
         RecruitsCommandButton shieldsDownButton = new RecruitsCommandButton(x + 100, y + 38, TEXT_SHIELDS_DOWN,
                 button -> {
-                    if (!groups.isEmpty()) {
-                        for (RecruitsGroup group : groups) {
-                            if (!group.isDisabled()) {
-                                Main.SIMPLE_CHANNEL.sendToServer(new MessageShields(player.getUUID(), group.getUUID(), false));
-                                ClientManager.removeGroupSpecialState(group.getUUID(), SPECIAL_SHIELDS_UP);
-                            }
+                    List<Integer> targetIds = screen.getSelectedGroupIds();
+                    if (!targetIds.isEmpty()) {
+                        for (Integer id : targetIds) {
+                            Main.SIMPLE_CHANNEL.sendToServer(new MessageShields(player.getUUID(), id, false));
                         }
                         screen.sendCommandInChat(75);
                     }
                 });
         shieldsDownButton.setTooltip(Tooltip.create(TOOLTIP_SHIELDS_DOWN));
-        shieldsDownButton.active = isOneGroupActive;
+        shieldsDownButton.active = isAnyGroupAvailable;
         screen.addRenderableWidget(shieldsDownButton);
 
-        //ATTACK
-        RecruitsCommandButton attackButton = new RecruitsCommandButton(x, y + 45, TEXT_ATTACK,
+        // FORGET TARGETS
+        RecruitsCommandButton clearTargetsButton = new RecruitsCommandButton(x, y + 50, TEXT_CLEAR_TARGET,
                 button -> {
-                    if (!groups.isEmpty()) {
-                        for (RecruitsGroup group : groups) {
-                            if (!group.isDisabled()) {
-                                Main.SIMPLE_CHANNEL.sendToServer(new MessageAttack(player.getUUID(), group.getUUID()));
-                            }
-                        }
-                        screen.sendCommandInChat(69);
-                    }
-                });
-        attackButton.setTooltip(Tooltip.create(TOOLTIP_ATTACK));
-        attackButton.active = isOneGroupActive && screen.rayBlockPos != null;
-        screen.addRenderableWidget(attackButton);
-
-        //FORGET TARGETS
-        RecruitsCommandButton clearTargetsButton = new RecruitsCommandButton(x, y + 70, TEXT_CLEAR_TARGET,
-                button -> {
-                    if (!groups.isEmpty()) {
-                        for (RecruitsGroup group : groups) {
-                            if (!group.isDisabled()) {
-                                Main.SIMPLE_CHANNEL.sendToServer(new MessageClearTarget(player.getUUID(), group.getUUID()));
-                            }
+                    List<Integer> targetIds = screen.getSelectedGroupIds();
+                    if (!targetIds.isEmpty()) {
+                        for (Integer id : targetIds) {
+                            Main.SIMPLE_CHANNEL.sendToServer(new MessageClearTarget(player.getUUID(), id));
                         }
                         screen.sendCommandInChat(9);
                     }
                 });
         clearTargetsButton.setTooltip(Tooltip.create(TOOLTIP_CLEAR_TARGET));
-        clearTargetsButton.active = isOneGroupActive;
+        clearTargetsButton.active = isAnyGroupAvailable;
         screen.addRenderableWidget(clearTargetsButton);
 
-        //PASSIVE
+        // PASSIVE
         RecruitsCommandButton passiveButton = new RecruitsCommandButton(x - 100, y - 38, TEXT_PASSIVE,
                 button -> {
-                    if (!groups.isEmpty()) {
-                        for (RecruitsGroup group : groups) {
-                            if (!group.isDisabled()) {
-                                Main.SIMPLE_CHANNEL.sendToServer(new MessageAggro(player.getUUID(), 3, group.getUUID()));
-                                ClientManager.setGroupAggroState(group.getUUID(), TEXT_PASSIVE.copy().withStyle(net.minecraft.ChatFormatting.RED));
-                            }
+                    List<Integer> targetIds = screen.getSelectedGroupIds();
+                    if (!targetIds.isEmpty()) {
+                        for (Integer id : targetIds) {
+                            Main.SIMPLE_CHANNEL.sendToServer(new MessageAggro(player.getUUID(), 3, id));
                         }
                         screen.sendCommandInChat(13);
                     }
                 });
         passiveButton.setTooltip(Tooltip.create(TOOLTIP_PASSIVE));
-        passiveButton.active = isOneGroupActive;
+        passiveButton.active = isAnyGroupAvailable;
         screen.addRenderableWidget(passiveButton);
 
-        //NEUTRAL
+        // NEUTRAL
         RecruitsCommandButton neutralButton = new RecruitsCommandButton(x - 100, y - 13 , TEXT_NEUTRAL,
                 button -> {
-                    if (!groups.isEmpty()) {
-                        for (RecruitsGroup group : groups) {
-                            if (!group.isDisabled()) {
-                                Main.SIMPLE_CHANNEL.sendToServer(new MessageAggro(player.getUUID(), 0, group.getUUID()));
-                                ClientManager.setGroupAggroState(group.getUUID(), TEXT_NEUTRAL);
-                            }
+                    List<Integer> targetIds = screen.getSelectedGroupIds();
+                    if (!targetIds.isEmpty()) {
+                        for (Integer id : targetIds) {
+                            Main.SIMPLE_CHANNEL.sendToServer(new MessageAggro(player.getUUID(), 0, id));
                         }
                         screen.sendCommandInChat(10);
                     }
                 });
         neutralButton.setTooltip(Tooltip.create(TOOLTIP_NEUTRAL));
-        neutralButton.active = isOneGroupActive;
+        neutralButton.active = isAnyGroupAvailable;
         screen.addRenderableWidget(neutralButton);
 
-        //RAID
+        // RAID
         RecruitsCommandButton raidButton = new RecruitsCommandButton(x - 100, y + 38, TEXT_RAID,
                 button -> {
-                    if (!groups.isEmpty()) {
-                        for (RecruitsGroup group : groups) {
-                            if (!group.isDisabled()) {
-                                Main.SIMPLE_CHANNEL.sendToServer(new MessageAggro(player.getUUID(), 2, group.getUUID()));
-                                ClientManager.setGroupAggroState(group.getUUID(), TEXT_RAID);
-                            }
+                    List<Integer> targetIds = screen.getSelectedGroupIds();
+                    if (!targetIds.isEmpty()) {
+                        for (Integer id : targetIds) {
+                            Main.SIMPLE_CHANNEL.sendToServer(new MessageAggro(player.getUUID(), 2, id));
                         }
                         screen.sendCommandInChat(12);
                     }
                 });
         raidButton.setTooltip(Tooltip.create(TOOLTIP_RAID));
-        raidButton.active = isOneGroupActive;
+        raidButton.active = isAnyGroupAvailable;
         screen.addRenderableWidget(raidButton);
 
-        //AGGRESSIVE
+        // AGGRESSIVE
         RecruitsCommandButton aggressiveButton = new RecruitsCommandButton(x - 100, y + 13, TEXT_AGGRESSIVE,
                 button -> {
-                    if (!groups.isEmpty()) {
-                        for (RecruitsGroup group : groups) {
-                            if (!group.isDisabled()) {
-                                Main.SIMPLE_CHANNEL.sendToServer(new MessageAggro(player.getUUID(), 1, group.getUUID()));
-                                ClientManager.setGroupAggroState(group.getUUID(), TEXT_AGGRESSIVE);
-                            }
+                    List<Integer> targetIds = screen.getSelectedGroupIds();
+                    if (!targetIds.isEmpty()) {
+                        for (Integer id : targetIds) {
+                            Main.SIMPLE_CHANNEL.sendToServer(new MessageAggro(player.getUUID(), 1, id));
                         }
                         screen.sendCommandInChat(11);
                     }
                 });
         aggressiveButton.setTooltip(Tooltip.create(TOOLTIP_AGGRESSIVE));
-        aggressiveButton.active = isOneGroupActive;
+        aggressiveButton.active = isAnyGroupAvailable;
         screen.addRenderableWidget(aggressiveButton);
     }
 }

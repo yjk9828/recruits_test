@@ -1,8 +1,6 @@
 package com.talhanation.recruits.network;
 
-import com.talhanation.recruits.RecruitEvents;
 import com.talhanation.recruits.entities.AbstractRecruitEntity;
-import com.talhanation.recruits.world.RecruitsGroup;
 import de.maxhenkel.corelib.net.Message;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.server.level.ServerPlayer;
@@ -16,15 +14,15 @@ import java.util.UUID;
 public class MessageDisbandGroup implements Message<MessageDisbandGroup> {
 
     private UUID owner;
-    private UUID groupUUID;
+    private UUID recruit;
     private boolean keepTeam;
 
     public MessageDisbandGroup() {
     }
 
-    public MessageDisbandGroup(UUID owner, UUID groupUUID, boolean keepTeam) {
+    public MessageDisbandGroup(UUID owner, UUID recruit, boolean keepTeam) {
         this.owner = owner;
-        this.groupUUID = groupUUID;
+        this.recruit = recruit;
         this.keepTeam = keepTeam;
     }
 
@@ -34,33 +32,40 @@ public class MessageDisbandGroup implements Message<MessageDisbandGroup> {
 
     public void executeServerSide(NetworkEvent.Context context) {
         ServerPlayer player = Objects.requireNonNull(context.getSender());
-        RecruitsGroup group = RecruitEvents.recruitsGroupsManager.getGroup(groupUUID);
-        if(group == null) return;
-
-        group.setDisbandContext(new RecruitsGroup.DisbandContext(true, keepTeam, true));
-
-        RecruitEvents.recruitsGroupsManager.broadCastGroupsToPlayer(player);
-
         List<AbstractRecruitEntity> list = player.getCommandSenderWorld().getEntitiesOfClass(
                 AbstractRecruitEntity.class,
                 player.getBoundingBox().inflate(100D)
         );
+        int group = -1;
 
-        for(AbstractRecruitEntity recruit : list){
-            recruit.needsGroupUpdate = true;
+        for (AbstractRecruitEntity recruit1 : list) {
+            if (recruit1.getUUID().equals(recruit)) {
+                group = recruit1.getGroup();
+                break;
+            }
+        }
+
+        if (group == -1) {
+            return;
+        }
+
+        for (AbstractRecruitEntity recruit : list) {
+            if (owner.equals(recruit.getOwnerUUID()) && recruit.getGroup() == group) {
+                recruit.disband(context.getSender(), keepTeam, true);
+            }
         }
     }
 
     public MessageDisbandGroup fromBytes(FriendlyByteBuf buf) {
         this.owner = buf.readUUID();
-        this.groupUUID = buf.readUUID();
+        this.recruit = buf.readUUID();
         this.keepTeam = buf.readBoolean();
         return this;
     }
 
     public void toBytes(FriendlyByteBuf buf) {
         buf.writeUUID(owner);
-        buf.writeUUID(groupUUID);
+        buf.writeUUID(recruit);
         buf.writeBoolean(keepTeam);
     }
 }

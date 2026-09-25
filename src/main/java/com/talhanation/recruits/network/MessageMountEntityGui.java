@@ -1,11 +1,7 @@
 package com.talhanation.recruits.network;
 
-import com.talhanation.recruits.compat.siegeweapons.SiegeWeapon;
-import com.talhanation.recruits.compat.smallships.SmallShips;
 import com.talhanation.recruits.config.RecruitsServerConfig;
 import com.talhanation.recruits.entities.AbstractRecruitEntity;
-import com.talhanation.recruits.entities.CaptainEntity;
-import com.talhanation.recruits.entities.SiegeEngineerEntity;
 import de.maxhenkel.corelib.net.Message;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.chat.Component;
@@ -56,7 +52,9 @@ public class MessageMountEntityGui implements Message<MessageMountEntityGui> {
             List<Entity> list = recruit.getCommandSenderWorld().getEntitiesOfClass(
                     Entity.class,
                     recruit.getBoundingBox().inflate(8),
-                    (mount) -> recruit.canMountEntity(mount)
+                    (mount) -> !(mount instanceof AbstractHorse horse &&
+                            horse.hasControllingPassenger()) &&
+                            RecruitsServerConfig.MountWhiteList.get().contains(mount.getEncodeId())
             );
 
             double d0 = -1.0D;

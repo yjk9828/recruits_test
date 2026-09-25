@@ -120,33 +120,25 @@ public class AsyncPath extends Path {
 
         final Path bestPath = this.pathSupplier.get();
 
-        if (bestPath != null) {
-            this.nodes.addAll(bestPath.nodes);
-            this.target = bestPath.getTarget();
-            this.distToTarget = bestPath.getDistToTarget();
-            this.canReach = bestPath.canReach();
-        } else {
-            this.canReach = false;
-        }
+        this.nodes.addAll(bestPath.nodes); // we mutate this list to reuse the logic in Path
+        this.target = bestPath.getTarget();
+        this.distToTarget = bestPath.getDistToTarget();
+        this.canReach = bestPath.canReach();
 
         processState = ProcessState.COMPLETED;
 
-        List<Runnable> callbacks = new ArrayList<>(this.postProcessing);
-        this.postProcessing.clear();
-        for (Runnable runnable : callbacks) {
-            try {
-                runnable.run();
-            } catch (Exception e) {
-                com.talhanation.recruits.Main.LOGGER.error("Exception in AsyncPath post-processing callback", e);
-            }
+        for (Runnable runnable : this.postProcessing) {
+            runnable.run();
         }
     }
 
     /**
-     * @return true wenn der Pfad vollständig verarbeitet ist und gelesen werden darf
+     * if this path is accessed while it hasn't processed, just process it in-place
      */
-    private boolean ensureProcessed() {
-        return this.processState == ProcessState.COMPLETED;
+    private void checkProcessed() {
+        if (this.processState == ProcessState.WAITING || this.processState == ProcessState.PROCESSING) {
+            this.process();
+        }
     }
 
     /*
@@ -154,19 +146,22 @@ public class AsyncPath extends Path {
      */
     @Override
     public @NotNull BlockPos getTarget() {
-        if (!ensureProcessed()) return BlockPos.ZERO;
+        this.checkProcessed();
+
         return Objects.requireNonNull(this.target);
     }
 
     @Override
     public float getDistToTarget() {
-        if (!ensureProcessed()) return Float.MAX_VALUE;
+        this.checkProcessed();
+
         return this.distToTarget;
     }
 
     @Override
     public boolean canReach() {
-        if (!ensureProcessed()) return false;
+        this.checkProcessed();
+
         return this.canReach;
     }
 
@@ -180,93 +175,109 @@ public class AsyncPath extends Path {
 
     @Override
     public void advance() {
-        if (!ensureProcessed()) return;
+        this.checkProcessed();
+
         super.advance();
     }
 
     @Override
     public boolean notStarted() {
-        if (!ensureProcessed()) return true;
+        this.checkProcessed();
+
         return super.notStarted();
     }
 
     @Nullable
     @Override
     public Node getEndNode() {
-        if (!ensureProcessed()) return null;
+        this.checkProcessed();
+
         return super.getEndNode();
     }
 
     @Override
     public @NotNull Node getNode(int index) {
-        if (!ensureProcessed()) throw new IllegalStateException("AsyncPath not yet processed");
+        this.checkProcessed();
+
         return super.getNode(index);
     }
 
     @Override
     public void truncateNodes(int length) {
-        if (!ensureProcessed()) return;
+        this.checkProcessed();
+
         super.truncateNodes(length);
     }
 
     @Override
     public void replaceNode(int index, @NotNull Node node) {
-        if (!ensureProcessed()) return;
+        this.checkProcessed();
+
         super.replaceNode(index, node);
     }
 
     @Override
     public int getNodeCount() {
-        if (!ensureProcessed()) return 0;
+        this.checkProcessed();
+
         return super.getNodeCount();
     }
 
     @Override
     public int getNextNodeIndex() {
-        if (!ensureProcessed()) return 0;
+        this.checkProcessed();
+
         return super.getNextNodeIndex();
     }
 
     @Override
     public void setNextNodeIndex(int nodeIndex) {
-        if (!ensureProcessed()) return;
+        this.checkProcessed();
+
         super.setNextNodeIndex(nodeIndex);
     }
 
     @Override
     public @NotNull Vec3 getEntityPosAtNode(@NotNull Entity entity, int index) {
-        if (!ensureProcessed()) return entity.position();
+        this.checkProcessed();
+
         return super.getEntityPosAtNode(entity, index);
     }
 
     @Override
     public @NotNull BlockPos getNodePos(int index) {
-        if (!ensureProcessed()) return BlockPos.ZERO;
+        this.checkProcessed();
+
         return super.getNodePos(index);
     }
 
     @Override
     public @NotNull Vec3 getNextEntityPos(@NotNull Entity entity) {
-        if (!ensureProcessed()) return entity.position();
+        this.checkProcessed();
+
         return super.getNextEntityPos(entity);
     }
 
     @Override
     public @NotNull BlockPos getNextNodePos() {
-        if (!ensureProcessed()) return BlockPos.ZERO;
+        this.checkProcessed();
+
         return super.getNextNodePos();
     }
 
+
     @Override
     public @NotNull Node getNextNode() {
-        if (!ensureProcessed()) throw new IllegalStateException("AsyncPath not yet processed");
+        this.checkProcessed();
+
         return super.getNextNode();
     }
 
     @Nullable
     @Override
     public Node getPreviousNode() {
-        if (!ensureProcessed()) return null;
+        this.checkProcessed();
+
         return super.getPreviousNode();
     }
 }
