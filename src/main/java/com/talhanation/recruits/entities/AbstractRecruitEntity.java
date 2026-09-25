@@ -69,7 +69,7 @@ import net.minecraftforge.network.NetworkHooks;
 import net.minecraftforge.network.PacketDistributor;
 import net.minecraftforge.registries.ForgeRegistries;
 import org.jetbrains.annotations.NotNull;
-
+import com.talhanation.recruits.entities.ai.navigation.RecruitsOpenDoorGoal;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.util.*;
@@ -111,7 +111,7 @@ public abstract class AbstractRecruitEntity extends AbstractInventoryEntity{
     private static final EntityDataAccessor<Boolean> IS_FOLLOWING = SynchedEntityData.defineId(AbstractRecruitEntity.class, EntityDataSerializers.BOOLEAN);
     private static final EntityDataAccessor<Optional<UUID>> MOUNT_ID = SynchedEntityData.defineId(AbstractRecruitEntity.class, EntityDataSerializers.OPTIONAL_UUID);
     private static final EntityDataAccessor<Optional<UUID>> PROTECT_ID = SynchedEntityData.defineId(AbstractRecruitEntity.class, EntityDataSerializers.OPTIONAL_UUID);
-    private static final EntityDataAccessor<Integer> GROUP = SynchedEntityData.defineId(AbstractRecruitEntity.class, EntityDataSerializers.INT);
+    private static final EntityDataAccessor<Optional<UUID>> GROUP = SynchedEntityData.defineId(AbstractRecruitEntity.class, EntityDataSerializers.OPTIONAL_UUID);
     private static final EntityDataAccessor<Integer> XP = SynchedEntityData.defineId(AbstractRecruitEntity.class, EntityDataSerializers.INT);
     private static final EntityDataAccessor<Integer> LEVEL = SynchedEntityData.defineId(AbstractRecruitEntity.class, EntityDataSerializers.INT);
     private static final EntityDataAccessor<Integer> KILLS = SynchedEntityData.defineId(AbstractRecruitEntity.class, EntityDataSerializers.INT);
@@ -239,9 +239,9 @@ public abstract class AbstractRecruitEntity extends AbstractInventoryEntity{
         if(this.attackCooldown > 0) this.attackCooldown--;
 
 
-        if(this.isAlive() && this.tickCount % 20 == 0 && this.getState() != 3){
-            searchForTargetsAsync();
-        }
+		if(this.isAlive() && this.getState() != 3 && (this.tickCount + getTickPhase()) % getTargetSearchInterval() == 0){
+			searchForTargetsAsync();
+		}
 			// [신규 기능] 나침반 텔레포트 로직 호출 (10틱마다 검사)
 		if (this.tickCount % 10 == 0) {
 			this.checkCompassTeleport();
@@ -303,6 +303,19 @@ public abstract class AbstractRecruitEntity extends AbstractInventoryEntity{
 		// ★ [추가됨] 구덩이 탈출을 위한 제한적 벽 타기 로직 호출
 		//this.checkAndPerformWallClimb();
     }
+	// 엔티티 ID를 기준으로 0~59틱의 오프셋을 부여하여 연산 분산
+	private int getTickPhase() {
+		return Math.floorMod(this.getId(), 60);
+	}
+
+	// 교전 중인지 여부에 따라 타깃 탐색 주기를 동적으로 조절
+	private int getTargetSearchInterval() {
+		LivingEntity target = this.getTarget();
+		if (target != null && target.isAlive() && !target.isRemoved()) {
+			return 60; // 이미 교전 중이면 3초(60틱)마다 스캔
+		}
+		return 20; // 타깃이 없으면 1초(20틱)마다 스캔
+	}
 /**
  * 병사가 이동 중 벽(구덩이)에 막혔을 때,
  * 앞의 벽이 단단한 블록이고 그 위가 뚫려있다면 벽을 타고 오릅니다.
@@ -486,7 +499,7 @@ public abstract class AbstractRecruitEntity extends AbstractInventoryEntity{
         this.goalSelector.addGoal(1, new RecruitQuaffGoal(this));
         this.goalSelector.addGoal(1, new FleeTNT(this));
         this.goalSelector.addGoal(1, new FleeFire(this));
-        this.goalSelector.addGoal(6, new OpenDoorGoal(this, true) {});
+        this.goalSelector.addGoal(6, new RecruitsOpenDoorGoal(this, true));
         this.goalSelector.addGoal(1, new RecruitProtectEntityGoal(this));
         this.goalSelector.addGoal(0, new RecruitEatGoal(this));
         this.goalSelector.addGoal(5, new RecruitUpkeepPosGoal(this));
@@ -516,7 +529,7 @@ public abstract class AbstractRecruitEntity extends AbstractInventoryEntity{
     protected void defineSynchedData() {
         super.defineSynchedData();
         this.entityData.define(DATA_REMAINING_ANGER_TIME, 0);
-        this.entityData.define(GROUP, 0);
+        this.entityData.define(GROUP, Optional.empty());
         this.entityData.define(SHOULD_FOLLOW, false);
         this.entityData.define(SHOULD_BLOCK, false);
         this.entityData.define(SHOULD_MOUNT, false);
@@ -574,7 +587,9 @@ public abstract class AbstractRecruitEntity extends AbstractInventoryEntity{
         nbt.putBoolean("ShouldMount", this.getShouldMount());
         nbt.putBoolean("ShouldProtect", this.getShouldProtect());
         nbt.putBoolean("ShouldBlock", this.getShouldBlock());
-        nbt.putInt("Group", this.getGroup());
+        if (this.getGroupUUID() != null) {
+			nbt.putUUID("GroupUUID", this.getGroupUUID());
+		}
         nbt.putInt("Variant", this.getVariant());
         nbt.putBoolean("Listen", this.getListen());
         nbt.putBoolean("Fleeing", this.getFleeing());
@@ -650,7 +665,11 @@ public abstract class AbstractRecruitEntity extends AbstractInventoryEntity{
         this.setShouldBlock(nbt.getBoolean("ShouldBlock"));
         this.setShouldProtect(nbt.getBoolean("ShouldProtect"));
         this.setFleeing(nbt.getBoolean("Fleeing"));
-        this.setGroup(nbt.getInt("Group"));
+		if (nbt.contains("GroupUUID")) {
+			this.setGroup(nbt.getUUID("GroupUUID"));
+		} else {
+			this.setGroup((UUID) null);
+		}
         this.setListen(nbt.getBoolean("Listen"));
         this.setIsFollowing(nbt.getBoolean("isFollowing"));
         this.setXp(nbt.getInt("Xp"));
@@ -843,9 +862,10 @@ public abstract class AbstractRecruitEntity extends AbstractInventoryEntity{
     // 2 = RAID
     // 3 = PASSIVE
 
-    public int getGroup() {
-        return entityData.get(GROUP);
-    }
+	@Nullable
+	public UUID getGroupUUID() {
+		return this.entityData.get(GROUP).orElse(null);
+	}
 
 
     //FOLLOW
@@ -1092,9 +1112,9 @@ public abstract class AbstractRecruitEntity extends AbstractInventoryEntity{
         entityData.set(IS_FOLLOWING, bool);
     }
 
-    public void setGroup(int group){
-        entityData.set(GROUP, group);
-    }
+	public void setGroup(@Nullable UUID groupUUID) {
+		this.entityData.set(GROUP, Optional.ofNullable(groupUUID));
+	}
     public void setShouldRest(boolean bool){
         if(bool) setFollowState(0);
         entityData.set(SHOULD_REST, bool);
@@ -1310,9 +1330,17 @@ public abstract class AbstractRecruitEntity extends AbstractInventoryEntity{
 
     ////////////////////////////////////is FUNCTIONS////////////////////////////////////
 
-    public boolean isEffectedByCommand(UUID player_uuid, int group){
-        return (this.isOwned() && this.isAlive() && (this.getListen()) && Objects.equals(this.getOwnerUUID(), player_uuid) && (this.getGroup() == group || group == 0));
-    }
+	public boolean isEffectedByCommand(UUID player_uuid, @Nullable UUID targetGroupUUID) {
+		if (!this.isOwned() || !this.isAlive() || !this.getListen() || !Objects.equals(this.getOwnerUUID(), player_uuid)) {
+			return false;
+		}
+		// targetGroupUUID가 null이면 전체(All/No Group) 대상 명령
+		if (targetGroupUUID == null) {
+			return true;
+		}
+		// 병사가 속한 그룹 UUID와 명령받은 그룹 UUID 대조
+		return Objects.equals(this.getGroupUUID(), targetGroupUUID);
+	}
     public boolean isOwned(){
         return getIsOwned();
     }
@@ -2213,14 +2241,14 @@ public abstract class AbstractRecruitEntity extends AbstractInventoryEntity{
      *********************************************************/
     public void updateTeam(){
 // [추가된 부분] 그룹 99번(Black Ops)이면 팀 업데이트 차단
-		if (this.getGroup() == 999999) {
+		/*if (this.getGroup() == 999999) {
 			// 만약 어떤 이유로 팀 정보가 남아있다면 제거
 			if (this.getTeam() != null && !this.getCommandSenderWorld().isClientSide()) {
 				TeamEvents.removeRecruitFromTeam(this, this.getTeam(), (ServerLevel) this.getCommandSenderWorld());
 			}
 			this.needsTeamUpdate = false;
 			return; 
-		}
+		}*/
 		// [추가된 부분 끝]
         if(this.isOwned() && !this.getCommandSenderWorld().isClientSide()){
             Player owner = getOwner();
@@ -2888,5 +2916,31 @@ public abstract class AbstractRecruitEntity extends AbstractInventoryEntity{
                 break;
             }
         }
+    }
+// 기존 int 그룹 번호 요청 시: UUID의 하위 64비트를 int로 변환 (0번은 0 반환)
+    public int getGroup() {
+        UUID u = getGroupUUID();
+        if (u == null) return 0;
+        if (u.getMostSignificantBits() == 0L) {
+            return (int) u.getLeastSignificantBits(); // 0, 1, 2, 3 등 기본 번호 복원
+        }
+        return Math.abs(u.hashCode());
+    }
+
+    // 기존 int 그룹 지정 시: this.setGroup(1); 호출 지원
+    public void setGroup(int legacyGroupId) {
+        if (legacyGroupId == 0) {
+            this.setGroup((UUID) null);
+        } else {
+            this.setGroup(new UUID(0L, (long) legacyGroupId));
+        }
+    }
+
+    // int형 명령 호출 호환: recruit.isEffectedByCommand(playerUUID, intGroup)
+    public boolean isEffectedByCommand(UUID player_uuid, int legacyGroupId) {
+        if (legacyGroupId == 0) {
+            return this.isEffectedByCommand(player_uuid, (UUID) null);
+        }
+        return this.isEffectedByCommand(player_uuid, new UUID(0L, (long) legacyGroupId));
     }
 }

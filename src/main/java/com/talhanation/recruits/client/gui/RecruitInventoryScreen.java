@@ -26,7 +26,7 @@ import net.minecraft.world.item.Items;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
 import net.minecraftforge.client.gui.widget.ExtendedButton;
-
+import java.util.UUID;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -392,8 +392,9 @@ public class RecruitInventoryScreen extends ScreenBase<RecruitInventoryMenu> {
         super.containerTick();
         // Wait for groups to be loaded from server
         if(groups != null && !groups.isEmpty() && !buttonsSet){
-            groups.sort(Comparator.comparingInt(RecruitsGroup::getId));
-            this.currentGroup = getCurrentGroup(recruit.getGroup());
+			// 이름순으로 정렬
+			groups.sort(Comparator.comparing(RecruitsGroup::getName));
+			this.currentGroup = getCurrentGroup(recruit.getGroupUUID());
             
             // Update text box with current group name
             if (this.currentGroup != null) {
@@ -408,18 +409,15 @@ public class RecruitInventoryScreen extends ScreenBase<RecruitInventoryMenu> {
         }
     }
 
-    private RecruitsGroup getCurrentGroup(int x) {
-        RecruitsGroup group = null;
-        if (groups != null) {
-            for (RecruitsGroup recruitsGroup : groups) {
-                if (recruitsGroup.getId() == x) {
-                    group = recruitsGroup;
-                    break;
-                }
-            }
-        }
-        return group;
-    }
+	private RecruitsGroup getCurrentGroup(UUID targetUUID) {
+		if (groups == null || targetUUID == null) return null;
+		for (RecruitsGroup recruitsGroup : groups) {
+			if (targetUUID.equals(recruitsGroup.getUUID())) {
+				return recruitsGroup;
+			}
+		}
+		return null;
+	}
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
@@ -441,7 +439,7 @@ public class RecruitInventoryScreen extends ScreenBase<RecruitInventoryMenu> {
                     this.setFocused(null); // Remove focus
                     
                     // Send packet
-                    Main.SIMPLE_CHANNEL.sendToServer(new MessageGroup(currentGroup.getId(), recruit.getUUID()));
+                    Main.SIMPLE_CHANNEL.sendToServer(new MessageGroup(currentGroup.getUUID(), recruit.getUUID()));
                     return true;
                 }
             }
