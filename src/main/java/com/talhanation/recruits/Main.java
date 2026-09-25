@@ -8,6 +8,7 @@ import com.talhanation.recruits.client.gui.commandscreen.OtherCategory;
 import com.talhanation.recruits.network.MessageSaveTeamSettings;
 import com.talhanation.recruits.commands.PatrolSpawnCommand;
 import com.talhanation.recruits.commands.RecruitsAdminCommands;
+import com.talhanation.recruits.commands.RecruitsBankCommands;
 import com.talhanation.recruits.config.RecruitsClientConfig;
 import com.talhanation.recruits.config.RecruitsServerConfig;
 import com.talhanation.recruits.init.ModBlocks;
@@ -83,6 +84,7 @@ public class Main {
     public void onRegisterCommands(RegisterCommandsEvent event) {
         PatrolSpawnCommand.register(event.getDispatcher());
         RecruitsAdminCommands.register(event.getDispatcher());
+		RecruitsBankCommands.register(event.getDispatcher());
     }
 
     @SuppressWarnings({"unchecked", "rawtypes"})
@@ -192,6 +194,7 @@ public class Main {
                 MessageToClientOpenTakeOverScreen.class,
                 MessageToClientOpenMessengerAnswerScreen.class,
 				MessageTogglePvPGroup.class,
+				MessageFactionBankAction.class,
 				MessageTogglePvP.class
         };
 

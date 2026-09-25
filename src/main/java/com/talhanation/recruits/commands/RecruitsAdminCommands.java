@@ -51,15 +51,14 @@ public class RecruitsAdminCommands {
                         return builder.buildFuture();
                     });
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
-        LiteralArgumentBuilder<CommandSourceStack> literalBuilder = Commands.literal("recruits").requires((source) -> source.hasPermission(2));
+		LiteralArgumentBuilder<CommandSourceStack> literalBuilder = Commands.literal("recruits");
+        //LiteralArgumentBuilder<CommandSourceStack> literalBuilder = Commands.literal("recruits").requires((source) -> source.hasPermission(2));
         //TeamCommand
-        literalBuilder.then(Commands.literal("admin")
+// 2. 관리자 전용인 "admin"에만 OP 2레벨 요구[cite: 39]
+        literalBuilder.then(Commands.literal("admin").requires((source) -> source.hasPermission(2))
             .then(Commands.literal("tpRecruitsToOwner")
                 .then(Commands.argument("Owner", ScoreHolderArgument.scoreHolders()).suggests(ScoreHolderArgument.SUGGEST_SCORE_HOLDERS).executes((conetext) -> {
-
                     ServerLevel level = conetext.getSource().getLevel();
-
-
                     return tpToOwner(level, ScoreHolderArgument.getNamesWithDefaultWildcard(conetext, "Owner"));
             })))
             .then(Commands.literal("unitsManager")

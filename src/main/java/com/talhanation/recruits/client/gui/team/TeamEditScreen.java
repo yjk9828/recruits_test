@@ -32,7 +32,8 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraftforge.client.gui.widget.ExtendedButton;
 import org.lwjgl.glfw.GLFW;
-
+import net.minecraft.client.Minecraft;
+import com.talhanation.recruits.network.MessageFactionBankAction;
 import javax.annotation.Nullable;
 import java.awt.*;
 import java.util.ArrayList;
@@ -196,6 +197,37 @@ public class TeamEditScreen extends ScreenBase<TeamEditMenu> {
         this.guiTop = (height - this.imageHeight) / 2;
         postInit = true;
         super.init();
+		// 파벌이 생성되어 있는 상태(recruitsTeam != null)일 때만 금고 UI 표시
+		if (this.recruitsTeam != null) {
+			int bankX = leftPos + 185; // 메인 패널 우측 여백
+			int bankY = topPos + 20;
+			
+			boolean isLeader = Minecraft.getInstance().player.getUUID().equals(this.recruitsTeam.getTeamLeaderUUID());
+
+			// 10개 입금 버튼
+			this.addRenderableWidget(new ExtendedButton(bankX, bankY, 65, 20, Component.literal("입금 (+10)"), button -> {
+				Main.SIMPLE_CHANNEL.sendToServer(new MessageFactionBankAction(this.recruitsTeam.getStringID(), true, 10));
+			}));
+
+			// 64개 입금 버튼
+			this.addRenderableWidget(new ExtendedButton(bankX + 70, bankY, 65, 20, Component.literal("입금 (+64)"), button -> {
+				Main.SIMPLE_CHANNEL.sendToServer(new MessageFactionBankAction(this.recruitsTeam.getStringID(), true, 64));
+			}));
+
+			// 10개 출금 버튼 (리더 전용)
+			ExtendedButton withdraw10Btn = new ExtendedButton(bankX, bankY + 25, 65, 20, Component.literal("출금 (-10)"), button -> {
+				Main.SIMPLE_CHANNEL.sendToServer(new MessageFactionBankAction(this.recruitsTeam.getStringID(), false, 10));
+			});
+			withdraw10Btn.active = isLeader;
+			this.addRenderableWidget(withdraw10Btn);
+
+			// 64개 출금 버튼 (리더 전용)
+			ExtendedButton withdraw64Btn = new ExtendedButton(bankX + 70, bankY + 25, 65, 20, Component.literal("출금 (-64)"), button -> {
+				Main.SIMPLE_CHANNEL.sendToServer(new MessageFactionBankAction(this.recruitsTeam.getStringID(), false, 64));
+			});
+			withdraw64Btn.active = isLeader;
+			this.addRenderableWidget(withdraw64Btn);
+		}
     }
 
     public void postInit(){
@@ -500,6 +532,12 @@ public class TeamEditScreen extends ScreenBase<TeamEditMenu> {
             guiGraphics.renderFakeItem(currency, currencyX, currencyY);
             guiGraphics.renderItemDecorations(font, currency, currencyX, currencyY);
         }
+	// ★ 여기에 금고 잔고 텍스트를 추가합니다!
+		if (this.recruitsTeam != null) {
+			int bankTextX = this.guiLeft + 185;
+			int bankTextY = this.guiTop + 8;
+			guiGraphics.drawString(this.font, "금고: " + this.recruitsTeam.getBalance() + "G", bankTextX, bankTextY, 0xFFD700, false);
+		}
 
         if(textFieldTeamName != null)textFieldTeamName.render(guiGraphics, mouseX, mouseY, delta);
     }

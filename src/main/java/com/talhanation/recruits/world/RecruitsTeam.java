@@ -24,6 +24,24 @@ public class RecruitsTeam {
     public int maxNPCs;
     public int maxNPCsPerPlayer = -1;
     private int biome = -1;
+	private int balance = 0;
+
+	public int getBalance() { return balance; }
+	public void setBalance(int amount) { this.balance = Math.max(0, amount); }
+	
+	public void deposit(int amount) {
+		this.balance += amount;
+	}
+
+	public boolean withdraw(int amount) {
+		if (this.balance >= amount) {
+			this.balance -= amount;
+			return true;
+		}
+		return false;
+	}	
+	
+	
     public RecruitsTeam(String stringID, String teamLeaderName, CompoundTag banner) {
         this.stringID = stringID;
         this.teamDisplayName = stringID;

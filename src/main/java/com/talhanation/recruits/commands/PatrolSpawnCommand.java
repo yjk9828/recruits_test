@@ -8,13 +8,14 @@ import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.world.entity.monster.Pillager;
 
-
 public class PatrolSpawnCommand {
 
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
-        LiteralArgumentBuilder<CommandSourceStack> literalBuilder = Commands.literal("recruits").requires((source) -> source.hasPermission(2));
+        // 1. 루트는 누구나 통과할 수 있도록 requires 제거[cite: 38]
+        LiteralArgumentBuilder<CommandSourceStack> literalBuilder = Commands.literal("recruits");
 
-        literalBuilder.then(Commands.literal("spawn")
+        // 2. 관리자 전용인 "spawn"에 OP 2레벨 권한 부여[cite: 38]
+        literalBuilder.then(Commands.literal("spawn").requires((source) -> source.hasPermission(2))
                         .then(Commands.literal("pillagerPatrol")
                                 .then(Commands.literal("tiny").executes( (commandSource) -> {
                                     PillagerPatrolSpawn.spawnPillagerPatrol(commandSource.getSource().getEntity().getOnPos().above(), commandSource.getSource().getEntity().getOnPos(), commandSource.getSource().getLevel());
@@ -26,23 +27,19 @@ public class PatrolSpawnCommand {
                                 }))
                                 .then(Commands.literal("medium").executes( (commandSource) -> {
                                     PillagerPatrolSpawn.spawnMediumPillagerPatrol(commandSource.getSource().getEntity().getOnPos().above(), commandSource.getSource().getEntity().getOnPos(), commandSource.getSource().getLevel());
-
                                     return 0;
                                 }))
                                 .then(Commands.literal("large").executes( (commandSource) -> {
                                     PillagerPatrolSpawn.spawnLargePillagerPatrol(commandSource.getSource().getEntity().getOnPos().above(), commandSource.getSource().getEntity().getOnPos(), commandSource.getSource().getLevel());
-
                                     return 0;
                                 }))
                         )
                         .then(Commands.literal("recruitPatrol")
                             .then(Commands.literal("tiny").executes( (commandSource) -> {
-
                                 RecruitsPatrolSpawn.spawnTinyPatrol(commandSource.getSource().getEntity().getOnPos().above(), commandSource.getSource().getLevel());
                                 return 0;
                             }))
                             .then(Commands.literal("small").executes( (commandSource) -> {
-
                                 RecruitsPatrolSpawn.spawnSmallPatrol(commandSource.getSource().getEntity().getOnPos().above(), commandSource.getSource().getLevel());
                                 return 0;
                             }))
@@ -67,16 +64,4 @@ public class PatrolSpawnCommand {
 
         dispatcher.register(literalBuilder);
     }
-/*
-case 0 -> PillagerPatrolSpawn.spawnSmallPillagerPatrol(pos, pos, context.getSender().getLevel());
-            case 1 -> PillagerPatrolSpawn.spawnPillagerPatrol(pos, pos, context.getSender().getLevel());
-            case 2 -> PillagerPatrolSpawn.spawnMediumPillagerPatrol(pos, pos, context.getSender().getLevel());
-            case 3 -> PillagerPatrolSpawn.spawnLargePillagerPatrol(pos, pos, context.getSender().getLevel());
-            case 10 -> RecruitsPatrolSpawn.spawnCaravan(pos, context.getSender().getLevel());
-            case 11 -> RecruitsPatrolSpawn.spawnTinyPatrol(pos, context.getSender().getLevel());
-            case 12 -> RecruitsPatrolSpawn.spawnSmallPatrol(pos, context.getSender().getLevel());
-            case 13 -> RecruitsPatrolSpawn.spawnMediumPatrol(pos, context.getSender().getLevel());
-            case 14 -> RecruitsPatrolSpawn.spawnLargePatrol(pos, context.getSender().getLevel());
-            case 15 -> RecruitsPatrolSpawn.spawnHugePatrol(pos, context.getSender().getLevel());
- */
 }
