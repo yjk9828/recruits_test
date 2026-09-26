@@ -212,13 +212,32 @@ public abstract class AbstractRecruitEntity extends AbstractInventoryEntity{
         if(despawnTimer > 0) despawnTimer--;
         if(despawnTimer == 0) recruitCheckDespawn();
 
-        if(RecruitsServerConfig.RecruitsPayment.get()){
-            if(paymentTimer > 0) paymentTimer--;
-            if(paymentTimer == 0) {
-                if(getUpkeepPos() != null || getUpkeepUUID() != null) forcedUpkeep = true;
-                else checkPayment(this.getInventory());
-            }
-        }
+		if(RecruitsServerConfig.RecruitsPayment.get()){
+			if(paymentTimer > 0) paymentTimer--;
+			if(paymentTimer == 0) {
+				int wage = RecruitsServerConfig.RecruitsPaymentAmount.get();
+				boolean paidFromBank = false;
+
+				// 1. 병사가 파벌에 속해 있다면 파벌 금고(가상 계좌)에서 우선 결제
+				if (this.getTeam() != null && !this.level().isClientSide()) {
+					RecruitsTeam team = TeamEvents.recruitsTeamManager.getTeamByStringID(this.getTeam().getName());
+					if (team != null && team.withdraw(wage)) {
+						paidFromBank = true;
+						TeamEvents.recruitsTeamManager.save((ServerLevel) this.level());
+						this.resetPaymentTimer(); // 지불 성공 즉시 타이머 리셋
+					}
+				}
+
+				// 2. 금고에서 못 냈을 때만 기존 방식대로 보급 상자를 찾아가게 함
+				if (!paidFromBank) {
+					if(getUpkeepPos() != null || getUpkeepUUID() != null) {
+						forcedUpkeep = true;
+					} else {
+						checkPayment(this.getInventory());
+					}
+				}
+			}
+		}
 
         if(getMountTimer() > 0) setMountTimer(getMountTimer() - 1);
         if(getUpkeepTimer() > 0) setUpkeepTimer(getUpkeepTimer() - 1);
@@ -2753,28 +2772,43 @@ public abstract class AbstractRecruitEntity extends AbstractInventoryEntity{
 		super.completeUsingItem();
 	}
 
-    public void checkPayment(Container container) {
-        if(RecruitsServerConfig.RecruitsPayment.get() && isOwned()){
-            if(isPaymentInContainer(container)){
-                doPayment(container);
-            }
-            else{
-                if(isPaymentInContainer(this.getInventory())){
-                    doPayment(this.getInventory());
-                }
-                else{
-                    this.doNoPaymentAction();
-                    if(this.getOwner() != null){
-                        this.getOwner().sendSystemMessage(TEXT_NO_PAYMENT(this.getName().getString()));
-                    }
-                }
+	public void checkPayment(Container container) {
+		if (RecruitsServerConfig.RecruitsPayment.get() && isOwned()) {
+			int wage = RecruitsServerConfig.RecruitsPaymentAmount.get();
+			boolean paid = false;
 
+			// 1. [파벌 금고 자동 차감]: 병사가 팀에 속해 있다면 파벌 금고에서 우선 지출
+			if (this.getTeam() != null && !this.level().isClientSide()) {
+				RecruitsTeam team = TeamEvents.recruitsTeamManager.getTeamByStringID(this.getTeam().getName());
+				if (team != null && team.withdraw(wage)) {
+					paid = true;
+					TeamEvents.recruitsTeamManager.save((ServerLevel) this.level());
+				}
+			}
 
-            }
+			// 2. 파벌 금고에서 못 냈다면 기존 보급 상자 확인
+			if (!paid && isPaymentInContainer(container)) {
+				doPayment(container);
+				paid = true;
+			}
 
-            resetPaymentTimer();
-        }
-    }
+			// 3. 보급 상자에도 없다면 병사 인벤토리 확인
+			if (!paid && isPaymentInContainer(this.getInventory())) {
+				doPayment(this.getInventory());
+				paid = true;
+			}
+
+			// 4. 전부 실패했을 때만 미지급 페널티 부여
+			if (!paid) {
+				this.doNoPaymentAction();
+				if (this.getOwner() != null) {
+					this.getOwner().sendSystemMessage(TEXT_NO_PAYMENT(this.getName().getString()));
+				}
+			}
+
+			resetPaymentTimer();
+		}
+	}
 
     public void doNoPaymentAction(){
         NoPaymentAction action = RecruitsServerConfig.RecruitsNoPaymentAction.get();
