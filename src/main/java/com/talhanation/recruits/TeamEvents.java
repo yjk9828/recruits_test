@@ -7,6 +7,8 @@ import com.talhanation.recruits.network.*;
 import com.talhanation.recruits.world.RecruitsDiplomacyManager;
 import com.talhanation.recruits.world.RecruitsTeam;
 import com.talhanation.recruits.world.RecruitsTeamManager;
+import com.talhanation.recruits.world.RecruitsClaimManager;
+import com.talhanation.recruits.world.RecruitsClaimSaveData;
 import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.core.Holder;
@@ -35,7 +37,9 @@ import net.minecraftforge.network.PacketDistributor;
 import net.minecraftforge.registries.ForgeRegistries;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
-
+import net.minecraft.world.level.Level;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraftforge.event.level.LevelEvent;
 import java.util.*;
 
 public class TeamEvents {
@@ -43,6 +47,7 @@ public class TeamEvents {
     public MinecraftServer server;
     public static RecruitsTeamManager recruitsTeamManager;
     public static RecruitsDiplomacyManager recruitsDiplomacyManager;
+	public static RecruitsClaimManager recruitsClaimManager = new RecruitsClaimManager();
 
     @SubscribeEvent
     public void onServerStarting(ServerStartingEvent event) {
@@ -62,6 +67,13 @@ public class TeamEvents {
         recruitsDiplomacyManager = new RecruitsDiplomacyManager();
         recruitsDiplomacyManager.load(server.overworld());
     }
+	// 월드 로드 이벤트 또는 TeamEvents 초기화 위치에서 load
+	@SubscribeEvent
+	public static void onLevelLoad(LevelEvent.Load event) {
+		if (event.getLevel() instanceof ServerLevel serverLevel && serverLevel.dimension() == Level.OVERWORLD) {
+			recruitsClaimManager.init(serverLevel);
+		}
+	}
 
     @SubscribeEvent
     public void onServerStopping(ServerStoppingEvent event) {
