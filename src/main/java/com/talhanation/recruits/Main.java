@@ -9,6 +9,7 @@ import com.talhanation.recruits.network.MessageSaveTeamSettings;
 import com.talhanation.recruits.commands.PatrolSpawnCommand;
 import com.talhanation.recruits.commands.RecruitsAdminCommands;
 import com.talhanation.recruits.commands.RecruitsBankCommands;
+import com.talhanation.recruits.commands.RecruitsClaimCommands;
 import com.talhanation.recruits.config.RecruitsClientConfig;
 import com.talhanation.recruits.config.RecruitsServerConfig;
 import com.talhanation.recruits.init.ModBlocks;
@@ -85,6 +86,7 @@ public class Main {
         PatrolSpawnCommand.register(event.getDispatcher());
         RecruitsAdminCommands.register(event.getDispatcher());
 		RecruitsBankCommands.register(event.getDispatcher());
+		RecruitsClaimCommands.register(event.getDispatcher());
     }
 
     @SuppressWarnings({"unchecked", "rawtypes"})
