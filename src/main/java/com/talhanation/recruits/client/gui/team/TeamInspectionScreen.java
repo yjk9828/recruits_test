@@ -24,7 +24,6 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.player.Player;
 import net.minecraftforge.api.distmarker.Dist;
@@ -78,11 +77,22 @@ public class TeamInspectionScreen extends ListScreenBase implements IPlayerSelec
         this.player = player;
     }
 
-    @Override
+	@Override
     protected void init() {
         super.init();
-        postInit = false;
-        Main.SIMPLE_CHANNEL.sendToServer(new MessageToServerRequestUpdateTeamInspaction());
+
+        // ★ 1. recruitsTeam이 null인 경우, 플레이어의 스코어보드 팀을 통해 즉시 복원
+        if (recruitsTeam == null && this.player != null && this.player.getTeam() != null) {
+            String teamName = this.player.getTeam().getName();
+            if (TeamEvents.recruitsTeamManager != null) {
+                recruitsTeam = TeamEvents.recruitsTeamManager.getTeamByStringID(teamName);
+            }
+        }
+
+        // ★ 2. 팀 ID가 확보되었으면 서버에 최신 팀원 데이터 갱신 요청
+        if (recruitsTeam != null && recruitsTeam.getStringID() != null && !recruitsTeam.getStringID().isEmpty()) {
+            Main.SIMPLE_CHANNEL.sendToServer(new MessageToServerRequestUpdateTeamInspaction(recruitsTeam.getStringID()));
+        }
 
         gapTop = (int) (this.height * 0.1);
         gapBottom = (int) (this.height * 0.1);
@@ -97,7 +107,7 @@ public class TeamInspectionScreen extends ListScreenBase implements IPlayerSelec
         if (playerList != null) {
             playerList.updateSize(width, height, guiTop + HEADER_SIZE + SEARCH_HEIGHT, guiTop + HEADER_SIZE + units * UNIT_SIZE);
         } else {
-            playerList = new PlayersList(width, height, guiTop + HEADER_SIZE + SEARCH_HEIGHT, guiTop + HEADER_SIZE + units * UNIT_SIZE, CELL_HEIGHT,  this, PlayersList.FilterType.SAME_TEAM, player, true);
+            playerList = new PlayersList(width, height, guiTop + HEADER_SIZE + SEARCH_HEIGHT, guiTop + HEADER_SIZE + units * UNIT_SIZE, CELL_HEIGHT, this, PlayersList.FilterType.SAME_TEAM, player, true);
         }
         addWidget(playerList);
 
@@ -106,10 +116,28 @@ public class TeamInspectionScreen extends ListScreenBase implements IPlayerSelec
                     minecraft.setScreen(parent);
                 });
         addRenderableWidget(backButton);
+
+        // ★ 3. 위젯 등록 실행
+        this.postInit = false;
+        if (recruitsTeam != null) {
+            this.postInit();
+        }
     }
 
+	public void updateTeamData(RecruitsTeam updatedTeam) {
+        if (updatedTeam != null) {
+            recruitsTeam = updatedTeam;
+            this.clearWidgets();
+            this.addRenderableWidget(backButton);
+            if (playerList != null) addWidget(playerList);
+            this.postInit = false;
+            this.postInit();
+        }
+    }
 
     public void postInit(){
+        if (recruitsTeam == null) return;
+
         this.bannerRenderer = new BannerRenderer(recruitsTeam);
         int buttonY = guiTop + HEADER_SIZE + 5 + units * UNIT_SIZE;
         this.selectedPlayerWidget = new SelectedPlayerWidget(font, guiLeft + 130, guiTop + 20, 100, 20, Component.literal(""), () -> {});
@@ -124,9 +152,8 @@ public class TeamInspectionScreen extends ListScreenBase implements IPlayerSelec
                 button -> {
                     TeamEditScreen.leaderInfo = null;
                     TeamEvents.openTeamEditScreen(player);
-            //minecraft.setScreen(new TeamEditScreen(this, player, recruitsTeam));
                 });
-        editButton.visible = isTeamLeader && isEditingAllowed;
+        editButton.visible = isTeamLeader;
         addRenderableWidget(editButton);
 
         diplomacyButton = new ExtendedButton(guiLeft + 87, guiTop + 99, 60, 20, DIPLOMACY_BUTTON,
@@ -139,17 +166,16 @@ public class TeamInspectionScreen extends ListScreenBase implements IPlayerSelec
                 button -> {
                     minecraft.setScreen(new TeamManageScreen(this, player, recruitsTeam));
                 });
-        manageButton.visible = isTeamLeader && isManagingAllowed;
+        manageButton.visible = isTeamLeader;
         addRenderableWidget(manageButton);
 
         boolean deleteActive = isTeamLeader && playerList != null && playerList.size() <= 1;
-        //leave team
+        
         leaveButton = new ExtendedButton(guiLeft + 7, buttonY, 60, 20, deleteActive ? DELETE_BUTTON : LEAVE_BUTTON,
             button -> {
                 if(isTeamLeader){
                     if(deleteActive){
                         Main.SIMPLE_CHANNEL.sendToServer(new MessageLeaveTeam());
-
                         minecraft.setScreen(new TeamMainScreen(player));
                         return;
                     }
@@ -175,9 +201,9 @@ public class TeamInspectionScreen extends ListScreenBase implements IPlayerSelec
             });
 
         addRenderableWidget(leaveButton);
-
         postInit = true;
     }
+
     @Override
     public void tick() {
         super.tick();
@@ -189,14 +215,15 @@ public class TeamInspectionScreen extends ListScreenBase implements IPlayerSelec
             this.postInit();
         }
         Lighting.setupFor3DItems();
-
     }
 
     @Override
     public boolean keyPressed(int p_96552_, int p_96553_, int p_96554_) {
         boolean flag = super.keyPressed(p_96552_, p_96553_, p_96554_);
         this.selected = null;
-        this.playerList.setFocused(null);
+        if (this.playerList != null) {
+            this.playerList.setFocused(null);
+        }
         return flag;
     }
 
@@ -212,6 +239,7 @@ public class TeamInspectionScreen extends ListScreenBase implements IPlayerSelec
         super.render(guiGraphics, mouseX, mouseY, delta);
         if(bannerRenderer != null) bannerRenderer.renderBanner(guiGraphics, this.guiLeft + x1, guiTop + y1, this.width, this.height, 60);
     }
+
     @Override
     public void renderBackground(GuiGraphics guiGraphics, int mouseX, int mouseY, float delta) {
         RenderSystem.setShaderTexture(0, TEXTURE);
@@ -230,7 +258,7 @@ public class TeamInspectionScreen extends ListScreenBase implements IPlayerSelec
         int crownX = width / 2 - 6;
         int crownY = guiTop + 22;
         int numbersX = 65;
-        if (!playerList.isEmpty()) {
+        if (playerList != null && !playerList.isEmpty()) {
             playerList.render(guiGraphics, mouseX, mouseY, delta);
         }
 
@@ -262,7 +290,6 @@ public class TeamInspectionScreen extends ListScreenBase implements IPlayerSelec
         }
     }
 
-
     @Override
     public RecruitsPlayerInfo getSelected() {
         return selected;
@@ -276,7 +303,6 @@ public class TeamInspectionScreen extends ListScreenBase implements IPlayerSelec
     @Override
     public Component getTitle() {
         String name = "";
-
         if(recruitsTeam != null){
             name = recruitsTeam.getTeamDisplayName();
         }

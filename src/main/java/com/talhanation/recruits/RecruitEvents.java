@@ -750,14 +750,21 @@ public class RecruitEvents {
         }
     }
 
-    @SubscribeEvent
+	@SubscribeEvent
     public void onRecruitDeath(LivingDeathEvent event) {
         Entity target = event.getEntity();
 
         if (target instanceof AbstractRecruitEntity recruit) {
             if (!recruit.getIsOwned() || server.overworld().isClientSide()) return;
 
-            //Morale loss when recruits teammate die
+            // ★ 병사 전사 시 팀 인원수 1 차감 및 저장
+            if (recruit.getTeam() != null && target.level() instanceof ServerLevel serverLevel) {
+                String teamId = recruit.getTeam().getName();
+                TeamEvents.addNPCToData(serverLevel, teamId, -1);
+                TeamEvents.recruitsTeamManager.save(serverLevel);
+            }
+
+            // Morale loss when recruits teammate die
             UUID owner = recruit.getOwnerUUID();
             recruit.getCommandSenderWorld().getEntitiesOfClass(
                     AbstractRecruitEntity.class,
