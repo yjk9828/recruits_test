@@ -12,10 +12,10 @@ import xaero.pac.common.server.claims.api.IServerDimensionClaimsManagerAPI;
 import xaero.pac.common.server.claims.api.IServerRegionClaimsAPI;
 import xaero.pac.common.server.parties.party.api.IPartyManagerAPI;
 import xaero.pac.common.server.parties.party.api.IServerPartyAPI;
-
+import com.talhanation.recruits.compat.OPACClaimCostListener;
 import javax.annotation.Nullable;
 import java.util.*;
-
+import net.minecraft.server.MinecraftServer;
 public class OPACBridge {
 
     public static boolean isOPACLoaded() {
@@ -153,5 +153,19 @@ public class OPACBridge {
             e.printStackTrace();
         }
         return false;
+    }
+/**
+     * OPAC의 점령 전 액션 리스너 매니저에 비용 검사 리스너를 등록합니다.
+     */
+    public static void registerClaimCostListener(MinecraftServer server) {
+        if (!isOPACLoaded()) return;
+
+        OpenPACServerAPI pacApi = OpenPACServerAPI.get(server);
+        if (pacApi == null) return;
+
+        var claimsManager = pacApi.getServerClaimsManager();
+        if (claimsManager != null && claimsManager.getActionListenerManager() != null) {
+            claimsManager.getActionListenerManager().register(new OPACClaimCostListener());
+        }
     }
 }
