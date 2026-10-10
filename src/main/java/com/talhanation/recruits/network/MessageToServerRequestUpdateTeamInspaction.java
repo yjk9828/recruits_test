@@ -24,6 +24,7 @@ public class MessageToServerRequestUpdateTeamInspaction implements Message<Messa
 
     @Override
     public Dist getExecutingSide() {
+        // CoreLib 규격: 서버 수신 패킷은 DEDICATED_SERVER 반환 (null 금지)
         return Dist.DEDICATED_SERVER;
     }
 
@@ -31,15 +32,24 @@ public class MessageToServerRequestUpdateTeamInspaction implements Message<Messa
     public void executeServerSide(NetworkEvent.Context context) {
         ServerPlayer player = Objects.requireNonNull(context.getSender());
         context.enqueueWork(() -> {
-            if (this.teamId == null || this.teamId.isEmpty()) return;
+            String targetId = this.teamId;
 
-            RecruitsTeam team = TeamEvents.recruitsTeamManager.getTeamByStringID(this.teamId);
-            if (team == null) return;
+            // teamId가 비어 있으면 플레이어의 바닐라 스코어보드 팀 이름 사용
+            if ((targetId == null || targetId.isEmpty()) && player.getTeam() != null) {
+                targetId = player.getTeam().getName();
+            }
 
-            Main.SIMPLE_CHANNEL.send(
-                PacketDistributor.PLAYER.with(() -> player),
-                new MessageToClientUpdateTeamInspection(team)
-            );
+            if (targetId == null || targetId.isEmpty()) return;
+
+            if (TeamEvents.recruitsTeamManager != null) {
+                RecruitsTeam team = TeamEvents.recruitsTeamManager.getTeamByStringID(targetId);
+                if (team != null) {
+                    Main.SIMPLE_CHANNEL.send(
+                        PacketDistributor.PLAYER.with(() -> player),
+                        new MessageToClientUpdateTeamInspection(team)
+                    );
+                }
+            }
         });
     }
 
@@ -51,7 +61,6 @@ public class MessageToServerRequestUpdateTeamInspaction implements Message<Messa
 
     @Override
     public void toBytes(FriendlyByteBuf buf) {
-        // ★ null 방어: null이면 빈 문자열 기록
         buf.writeUtf(this.teamId != null ? this.teamId : "");
     }
 }

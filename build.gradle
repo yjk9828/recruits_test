@@ -104,7 +104,7 @@ minecraft {
 sourceSets.main.resources { srcDir 'src/generated/resources' }
 
 repositories {
-    // [추가됨] lib 폴더를 저장소로 인식시킴
+    // [기존 유지] lib 폴더를 저장소로 인식시킴
     flatDir {
         dirs 'lib'
     }
@@ -116,6 +116,20 @@ repositories {
     mavenLocal()
     maven {
         url "https://www.cursemaven.com"
+    }
+
+    // [추가] Modrinth 저장소 (ForgeGradle 연동)
+    exclusiveContent {
+        forRepository {
+            maven {
+                name = "Modrinth"
+                url = "https://api.modrinth.com/maven"
+            }
+        }
+        forRepositories(fg.repository) // ForgeGradle 환경 필수
+        filter {
+            includeGroup "maven.modrinth"
+        }
     }
 }
 
@@ -153,6 +167,7 @@ dependencies {
 
     implementation fg.deobf("curse.maven:ewewukeks-musket-mod-354562:5779561")
     implementation fg.deobf("curse.maven:worldedit-225608:4586218")
+	compileOnly fg.deobf("maven.modrinth:gF3BGWvG:PkZL3SuC")
     
     // ... 나머지 의존성
 }

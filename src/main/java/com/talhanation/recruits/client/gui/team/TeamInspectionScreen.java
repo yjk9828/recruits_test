@@ -81,17 +81,17 @@ public class TeamInspectionScreen extends ListScreenBase implements IPlayerSelec
     protected void init() {
         super.init();
 
-        // ★ 1. recruitsTeam이 null인 경우, 플레이어의 스코어보드 팀을 통해 즉시 복원
-        if (recruitsTeam == null && this.player != null && this.player.getTeam() != null) {
-            String teamName = this.player.getTeam().getName();
-            if (TeamEvents.recruitsTeamManager != null) {
-                recruitsTeam = TeamEvents.recruitsTeamManager.getTeamByStringID(teamName);
-            }
+        // ★ 1. 팀 이름 확보 (recruitsTeam 객체 또는 플레이어의 바닐라 스코어보드 팀 기준)
+        String targetTeamName = null;
+        if (recruitsTeam != null && recruitsTeam.getStringID() != null && !recruitsTeam.getStringID().isEmpty()) {
+            targetTeamName = recruitsTeam.getStringID();
+        } else if (this.player != null && this.player.getTeam() != null) {
+            targetTeamName = this.player.getTeam().getName();
         }
 
-        // ★ 2. 팀 ID가 확보되었으면 서버에 최신 팀원 데이터 갱신 요청
-        if (recruitsTeam != null && recruitsTeam.getStringID() != null && !recruitsTeam.getStringID().isEmpty()) {
-            Main.SIMPLE_CHANNEL.sendToServer(new MessageToServerRequestUpdateTeamInspaction(recruitsTeam.getStringID()));
+        // ★ 2. 클라이언트-서버 분리 완벽 대응: 팀 이름만 있으면 서버에 즉시 최신 팀 데이터 요청!
+        if (targetTeamName != null && !targetTeamName.isEmpty()) {
+            Main.SIMPLE_CHANNEL.sendToServer(new MessageToServerRequestUpdateTeamInspaction(targetTeamName));
         }
 
         gapTop = (int) (this.height * 0.1);
@@ -117,23 +117,23 @@ public class TeamInspectionScreen extends ListScreenBase implements IPlayerSelec
                 });
         addRenderableWidget(backButton);
 
-        // ★ 3. 위젯 등록 실행
+        // ★ 3. 이미 데이터가 메모리에 있다면 즉시 UI 구성, 없다면 서버 패킷 도착 시 updateTeamData에서 구성됨
         this.postInit = false;
         if (recruitsTeam != null) {
             this.postInit();
         }
     }
-
 	public void updateTeamData(RecruitsTeam updatedTeam) {
-        if (updatedTeam != null) {
-            recruitsTeam = updatedTeam;
-            this.clearWidgets();
-            this.addRenderableWidget(backButton);
-            if (playerList != null) addWidget(playerList);
-            this.postInit = false;
-            this.postInit();
-        }
-    }
+			if (updatedTeam != null) {
+				recruitsTeam = updatedTeam;
+				this.clearWidgets();
+				this.addRenderableWidget(backButton);
+				if (playerList != null) addWidget(playerList);
+				this.postInit = false;
+				this.postInit();
+			}
+	}	
+
 
     public void postInit(){
         if (recruitsTeam == null) return;

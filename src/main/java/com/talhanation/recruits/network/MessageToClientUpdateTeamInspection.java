@@ -16,7 +16,7 @@ public class MessageToClientUpdateTeamInspection implements Message<MessageToCli
     public MessageToClientUpdateTeamInspection() {}
 
     public MessageToClientUpdateTeamInspection(RecruitsTeam team) {
-        this.teamTag = team.toNBT();
+        this.teamTag = team != null ? team.toNBT() : new CompoundTag();
     }
 
     @Override
@@ -27,9 +27,16 @@ public class MessageToClientUpdateTeamInspection implements Message<MessageToCli
     @Override
     public void executeClientSide(NetworkEvent.Context context) {
         context.enqueueWork(() -> {
-            if (Minecraft.getInstance().screen instanceof TeamInspectionScreen screen) {
+            if (this.teamTag != null && !this.teamTag.isEmpty()) {
                 RecruitsTeam updatedTeam = RecruitsTeam.fromNBT(this.teamTag);
-                screen.updateTeamData(updatedTeam);
+                
+                // 1. 클라이언트 정적 팀 캐시 즉시 갱신 (화면이 재열릴 때도 유지)
+                TeamInspectionScreen.recruitsTeam = updatedTeam;
+
+                // 2. 현재 열려있는 화면이 TeamInspectionScreen이면 UI 즉시 리로드
+                if (Minecraft.getInstance().screen instanceof TeamInspectionScreen screen) {
+                    screen.updateTeamData(updatedTeam);
+                }
             }
         });
     }
@@ -42,6 +49,6 @@ public class MessageToClientUpdateTeamInspection implements Message<MessageToCli
 
     @Override
     public void toBytes(FriendlyByteBuf buf) {
-        buf.writeNbt(this.teamTag);
+        buf.writeNbt(this.teamTag != null ? this.teamTag : new CompoundTag());
     }
 }
