@@ -302,17 +302,19 @@ public class FormationUtils {
                 }
             }
 
-            if (pos != null) {
-                BlockPos blockPos = FormationUtils.getPositionOrSurface(
-                        recruit.getCommandSenderWorld(),
-                        new BlockPos((int) pos.x, (int) pos.y, (int) pos.z)
-                );
+			// FormationUtils.java의 assignPositions() 내부
+			if (pos != null) {
+				BlockPos blockPos = FormationUtils.getPositionOrSurface(
+						recruit.getCommandSenderWorld(),
+						new BlockPos((int) Math.floor(pos.x), (int) Math.floor(pos.y), (int) Math.floor(pos.z))
+				);
 
-                recruit.setHoldPos(new Vec3(pos.x, blockPos.getY(), pos.z));
-                if(player != null) recruit.ownerRot = player.getYRot(); // player가 있을 때만 회전 동기화
-                recruit.setFollowState(3);
-                recruit.isInFormation = true;
-            }
+				// 블록 중심(X+0.5, Z+0.5)과 찾은 지면 높이(blockPos.getY())로 고정
+				recruit.setHoldPos(new Vec3(Math.floor(pos.x) + 0.5D, blockPos.getY(), Math.floor(pos.z) + 0.5D));
+				if(player != null) recruit.ownerRot = player.getYRot();
+				recruit.setFollowState(3);
+				recruit.isInFormation = true;
+			}
         }
     }
     
@@ -444,19 +446,35 @@ public class FormationUtils {
         return new Vec3(currentGuess.x, blockPos.getY(), currentGuess.z);
     }
 
+/**
+     * [수정] 공중에 뜨거나 나무 꼭대기로 치솟지 않고,
+     * 실제 엔티티가 발을 딛고 설 수 있는 단단한 지면(Solid Ground)을 정밀 탐색합니다.
+     */
     public static BlockPos getPositionOrSurface(Level level, BlockPos pos) {
-        boolean positionFree = true;
-        for(int i = 0; i < 3; i++) {
-            if(!level.getBlockState(pos.above(i)).isAir( )) {
-                positionFree = false;
-                break;
+        // 기준 위치에서 위로 4칸, 아래로 8칸 범위 내에서 단단한 바닥을 탐색
+        int startY = Math.min(level.getMaxBuildHeight() - 2, pos.getY() + 4);
+        int minY = Math.max(level.getMinBuildHeight() + 1, pos.getY() - 8);
+
+        BlockPos.MutableBlockPos checkPos = new BlockPos.MutableBlockPos(pos.getX(), startY, pos.getZ());
+
+        for (int y = startY; y >= minY; y--) {
+            checkPos.setY(y);
+            // 1. 발을 딛는 바닥 블록이 단단한 고체 블록(Solid)이어야 함
+            if (level.getBlockState(checkPos).isSolid() || level.getBlockState(checkPos).blocksMotion()) {
+                BlockPos standPos = checkPos.above(); // 서 있을 공간 (발 위치)
+                BlockPos headPos = standPos.above();   // 머리 공간
+
+                // 2. 발과 머리 위치가 통과 가능한 공간(공기/풀 등)이어야 함
+                boolean standFree = !level.getBlockState(standPos).blocksMotion();
+                boolean headFree = !level.getBlockState(headPos).blocksMotion();
+
+                if (standFree && headFree) {
+                    return standPos.immutable();
+                }
             }
         }
 
-        return positionFree ? pos : new BlockPos(
-                pos.getX(),
-                level.getHeightmapPos(Heightmap.Types.WORLD_SURFACE, pos).getY(),
-                pos.getZ()
-        );
+        // 지면을 못 찾은 경우 안전한 모션 블록 높이맵(MOTION_BLOCKING_NO_LEAVES)으로 대체
+        return level.getHeightmapPos(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, pos);
     }
 }

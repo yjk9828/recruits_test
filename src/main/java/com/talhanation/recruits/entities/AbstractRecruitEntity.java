@@ -525,9 +525,9 @@ public abstract class AbstractRecruitEntity extends AbstractInventoryEntity{
         this.goalSelector.addGoal(6, new RecruitUpkeepEntityGoal(this));
         this.goalSelector.addGoal(3, new RecruitMountEntity(this));
         this.goalSelector.addGoal(3, new RecruitDismountEntity(this));
-        this.goalSelector.addGoal(3, new RecruitMoveToPosGoal(this, 1.05D));
-        this.goalSelector.addGoal(2, new RecruitFollowOwnerGoal(this, 1.05D, 300, 100));
-        this.goalSelector.addGoal(2, new RecruitMeleeAttackGoal(this, 1.05D, this.getMeleeStartRange()));
+        this.goalSelector.addGoal(3, new RecruitMoveToPosGoal(this, 1.25D));
+        this.goalSelector.addGoal(2, new RecruitFollowOwnerGoal(this, 1.2D, 300, 100));
+        this.goalSelector.addGoal(2, new RecruitMeleeAttackGoal(this, 1.2D, this.getMeleeStartRange()));
         this.goalSelector.addGoal(3, new RecruitHoldPosGoal(this, 32.0F));
         //this.goalSelector.addGoal(7, new RecruitDodgeGoal(this));
         this.goalSelector.addGoal(4, new RestGoal(this));
@@ -1566,9 +1566,9 @@ public abstract class AbstractRecruitEntity extends AbstractInventoryEntity{
         int level = getXpLevel();
         if(level <= 10){
             getAttribute(Attributes.MAX_HEALTH).addPermanentModifier(new AttributeModifier("heath_bonus_level", 2D, AttributeModifier.Operation.ADDITION));
-            getAttribute(Attributes.ATTACK_DAMAGE).addPermanentModifier(new AttributeModifier("attack_bonus_level", 0.03D, AttributeModifier.Operation.ADDITION));
-            getAttribute(Attributes.KNOCKBACK_RESISTANCE).addPermanentModifier(new AttributeModifier("knockback_bonus_level", 0.0012D, AttributeModifier.Operation.ADDITION));
-            getAttribute(Attributes.MOVEMENT_SPEED).addPermanentModifier(new AttributeModifier("speed_bonus_level", 0.0025D, AttributeModifier.Operation.ADDITION));
+            getAttribute(Attributes.ATTACK_DAMAGE).addPermanentModifier(new AttributeModifier("attack_bonus_level", 0.5D, AttributeModifier.Operation.ADDITION));
+            getAttribute(Attributes.KNOCKBACK_RESISTANCE).addPermanentModifier(new AttributeModifier("knockback_bonus_level", 0.03D, AttributeModifier.Operation.ADDITION));
+            getAttribute(Attributes.MOVEMENT_SPEED).addPermanentModifier(new AttributeModifier("speed_bonus_level", 0.01D, AttributeModifier.Operation.ADDITION));
         }
         if(level > 10){
             getAttribute(Attributes.MAX_HEALTH).addPermanentModifier(new AttributeModifier("heath_bonus_level", 2D, AttributeModifier.Operation.ADDITION));
@@ -1580,9 +1580,9 @@ public abstract class AbstractRecruitEntity extends AbstractInventoryEntity{
         for(int i = 0; i < level; i++) {
             if (level <= 10) {
                 getAttribute(Attributes.MAX_HEALTH).addPermanentModifier(new AttributeModifier("heath_bonus_level", 2D, AttributeModifier.Operation.ADDITION));
-                getAttribute(Attributes.ATTACK_DAMAGE).addPermanentModifier(new AttributeModifier("attack_bonus_level", 0.03D, AttributeModifier.Operation.ADDITION));
-                getAttribute(Attributes.KNOCKBACK_RESISTANCE).addPermanentModifier(new AttributeModifier("knockback_bonus_level", 0.0012D, AttributeModifier.Operation.ADDITION));
-                getAttribute(Attributes.MOVEMENT_SPEED).addPermanentModifier(new AttributeModifier("speed_bonus_level", 0.0025D, AttributeModifier.Operation.ADDITION));}
+                getAttribute(Attributes.ATTACK_DAMAGE).addPermanentModifier(new AttributeModifier("attack_bonus_level", 0.5D, AttributeModifier.Operation.ADDITION));
+                getAttribute(Attributes.KNOCKBACK_RESISTANCE).addPermanentModifier(new AttributeModifier("knockback_bonus_level", 0.03D, AttributeModifier.Operation.ADDITION));
+                getAttribute(Attributes.MOVEMENT_SPEED).addPermanentModifier(new AttributeModifier("speed_bonus_level", 0.01D, AttributeModifier.Operation.ADDITION));}
             if (level > 10) {
                 getAttribute(Attributes.MAX_HEALTH).addPermanentModifier(new AttributeModifier("heath_bonus_level", 2D, AttributeModifier.Operation.ADDITION));
             }
