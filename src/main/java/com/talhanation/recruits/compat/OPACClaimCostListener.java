@@ -1,23 +1,27 @@
 package com.talhanation.recruits.compat;
 
 import com.talhanation.recruits.TeamEvents;
+import com.talhanation.recruits.entities.AbstractRecruitEntity;
 import com.talhanation.recruits.world.RecruitsTeam;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.phys.AABB;
 import xaero.pac.common.claims.action.api.ClaimingAction;
 import xaero.pac.common.server.claims.action.listener.api.IClaimActionListenerAPI;
 import xaero.pac.common.server.claims.action.listener.override.api.ClaimActionPermissionOverride;
 import xaero.pac.common.server.claims.api.IServerClaimsManagerAPI;
 
+import java.util.List;
 import java.util.UUID;
 
 public class OPACClaimCostListener implements IClaimActionListenerAPI {
 
-    public static final int CLAIM_COST_PER_CHUNK = 5; // 청크당 5G(에메랄드 5개)
+    public static final int CLAIM_COST_PER_CHUNK = 10; // 청크당 5G
 
     @Override
     public String getName() {
@@ -35,7 +39,6 @@ public class OPACClaimCostListener implements IClaimActionListenerAPI {
             ClaimActionPermissionOverride currentOverride,
             MinecraftServer server
     ) {
-        // 기본 권한 검사는 그대로 통과시킵니다.
         return currentOverride;
     }
 
@@ -49,7 +52,6 @@ public class OPACClaimCostListener implements IClaimActionListenerAPI {
             IServerClaimsManagerAPI claimsManager,
             MinecraftServer server
     ) {
-        // 청크 점령(CLAIM) 성공 시에만 비용 검사
         if (action == ClaimingAction.CLAIM) {
             ServerPlayer player = server.getPlayerList().getPlayer(playerId);
             ServerLevel level = server.getLevel(net.minecraft.resources.ResourceKey.create(
@@ -58,6 +60,36 @@ public class OPACClaimCostListener implements IClaimActionListenerAPI {
 
             if (level == null) return;
             ChunkPos chunkPos = new ChunkPos(chunkX, chunkZ);
+
+            // =========================================================================
+            // ★ 신규 추가: 청크 내 타인 소유 Recruits 주둔 여부 검사
+            // =========================================================================
+            int minX = chunkPos.getMinBlockX();
+            int minZ = chunkPos.getMinBlockZ();
+            AABB chunkBox = new AABB(minX, level.getMinBuildHeight(), minZ, minX + 16, level.getMaxBuildHeight(), minZ + 16);
+            List<Entity> entities = level.getEntities((Entity) null, chunkBox);
+
+            boolean otherRecruitsPresent = false;
+            for (Entity e : entities) {
+                if (!e.isAlive()) continue;
+
+                if (e instanceof AbstractRecruitEntity recruit) {
+                    UUID recruitOwnerUUID = recruit.getOwnerUUID();
+                    // 내 병사가 아닌 다른 플레이어의 병사가 있는 경우
+                    if (recruitOwnerUUID == null || !recruitOwnerUUID.equals(playerId)) {
+                        otherRecruitsPresent = true;
+                        break;
+                    }
+                }
+            }
+
+            if (otherRecruitsPresent) {
+                if (player != null) {
+                    player.sendSystemMessage(Component.literal("§c[영토 점령 실패] 해당 청크에 다른 세력의 병사가 주둔하고 있어 점령할 수 없습니다!"));
+                }
+                OPACBridge.unclaimChunk(level, chunkPos);
+                return;
+            }
 
             // 1. 소속 파벌 확인
             if (player == null || player.getTeam() == null) {
@@ -80,7 +112,6 @@ public class OPACClaimCostListener implements IClaimActionListenerAPI {
             int balance = team.getBalance();
             if (balance < CLAIM_COST_PER_CHUNK) {
                 player.sendSystemMessage(Component.literal("§c[영토 점령 실패] 파벌 금고 잔액이 부족하여 점령이 취소되었습니다! (필요: " + CLAIM_COST_PER_CHUNK + "G / 현재: " + balance + "G)"));
-                // 잔액 부족 시 청크 강제 회수
                 OPACBridge.unclaimChunk(level, chunkPos);
                 return;
             }
