@@ -1097,11 +1097,26 @@ public abstract class AbstractRecruitEntity extends AbstractInventoryEntity{
         this.entityData.set(XP, xp);
     }
 
-    public void addXp(int xp){
-        int currentXp = this.getXp();
-        int newXp = currentXp + xp;
+	public void addXp(int xp){
+        // 1. 착용 중인 장비 중 수선(Mending) 인챈트가 있고 내구도가 손상된 아이템 탐색
+        Map.Entry<EquipmentSlot, ItemStack> entry = EnchantmentHelper
+                .getRandomItemWith(net.minecraft.world.item.enchantment.Enchantments.MENDING, this, ItemStack::isDamaged);
 
-        this.entityData.set(XP, newXp);
+        if (entry != null) {
+            ItemStack stack = entry.getValue();
+            // 경험치 1당 내구도 2 회복
+            int repairAmount = Math.min(xp * 2, stack.getDamageValue());
+            stack.setDamageValue(stack.getDamageValue() - repairAmount);
+            
+            int spentXp = repairAmount / 2;
+            xp -= spentXp;
+        }
+
+        // 2. 수선에 쓰고 남은 경험치만 용병 레벨업 경험치로 누적
+        if (xp > 0) {
+            int currentXp = this.getXp();
+            this.entityData.set(XP, currentXp + xp);
+        }
     }
 
     public void setShouldHoldPos(boolean bool){
@@ -2185,6 +2200,18 @@ public abstract class AbstractRecruitEntity extends AbstractInventoryEntity{
     // 3 = PASSIVE
 	public boolean shouldAttack(LivingEntity target) {
 		// 1. 기존 블랙리스트 체크
+// [추가] FakePlayer(IF 기계, 자동화 모드 엔티티) 공격 대상 제외
+		// =========================================================
+		if (target instanceof net.minecraftforge.common.util.FakePlayer) {
+			return false;
+		}
+		if (target instanceof Player player) {
+			String name = player.getGameProfile().getName();
+			// [IF], [Minecraft] 등 대괄호로 감싸진 가짜 플레이어 이름 필터링
+			if (name.startsWith("[") && name.endsWith("]")) {
+				return false;
+			}
+		}
 		if(RecruitsServerConfig.TargetBlackList.get().contains(target.getEncodeId())) return false;
 		if(RecruitsServerConfig.TargetWhiteList.get().contains(target.getEncodeId())) return true;
 		if(target instanceof MessengerEntity messenger && messenger.isAtMission()) return false;
