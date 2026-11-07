@@ -3004,4 +3004,20 @@ public abstract class AbstractRecruitEntity extends AbstractInventoryEntity{
         }
         return this.isEffectedByCommand(player_uuid, new UUID(0L, (long) legacyGroupId));
     }
+	@Override
+    protected void dropEquipment() {
+        // Corpse 모드가 로드되어 있다면 바닐라 Mob의 장비 드롭 로직을 차단
+        if (net.minecraftforge.fml.ModList.get().isLoaded("corpse")) {
+            return;
+        }
+        super.dropEquipment();
+    }
+
+    @Override
+    protected void dropCustomDeathLoot(DamageSource source, int looting, boolean hitByPlayer) {
+        if (net.minecraftforge.fml.ModList.get().isLoaded("corpse")) {
+            return;
+        }
+        super.dropCustomDeathLoot(source, looting, hitByPlayer);
+    }
 }

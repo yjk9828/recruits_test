@@ -110,9 +110,15 @@ public class Corpse {
         nbt.putString("Dimension", recruit.getCommandSenderWorld().dimension().location().toString());
         nbt.putByte("Model", (byte) 0);
 
-        Death death = Death.fromNBT(nbt);
+		Death death = Death.fromNBT(nbt);
         try {
             createCorpseFromDeath(recruit, death, nbt, (ServerLevel) recruit.getCommandSenderWorld());
+
+            // 시체 엔티티로 복사 완료 후 본체 인벤토리 및 장착 장비 전면 제거
+            recruit.inventory.clearContent();
+            for (net.minecraft.world.entity.EquipmentSlot slot : net.minecraft.world.entity.EquipmentSlot.values()) {
+                recruit.setItemSlot(slot, ItemStack.EMPTY);
+            }
 
         } catch (ClassNotFoundException e) {
             Main.LOGGER.warn("Was not able to spawn recruit corpse for " + recruit.getName().getString());
