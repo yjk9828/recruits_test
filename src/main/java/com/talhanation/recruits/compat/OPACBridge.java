@@ -16,6 +16,8 @@ import com.talhanation.recruits.compat.OPACClaimCostListener;
 import javax.annotation.Nullable;
 import java.util.*;
 import net.minecraft.server.MinecraftServer;
+import com.talhanation.recruits.TeamEvents;           // ★ 추가
+import com.talhanation.recruits.world.RecruitsTeam;     // ★ 추가
 public class OPACBridge {
 
     public static boolean isOPACLoaded() {
@@ -168,4 +170,47 @@ public class OPACBridge {
             claimsManager.getActionListenerManager().register(new OPACClaimCostListener());
         }
     }
+/**
+ * 해당 청크를 소유한 주체(플레이어 또는 파티)의 Recruits/스코어보드 팀 이름을 반환합니다.
+ */
+	@Nullable
+	public static String getChunkOwnerTeamName(ServerLevel level, ChunkPos chunkPos) {
+		if (!isOPACLoaded()) return null;
+
+		UUID ownerId = getChunkOwnerId(level, chunkPos);
+		if (ownerId == null) return null;
+
+		MinecraftServer server = level.getServer();
+
+		// 1. ownerId가 접속 중인 개인 플레이어의 UUID인 경우
+		ServerPlayer ownerPlayer = server.getPlayerList().getPlayer(ownerId);
+		if (ownerPlayer != null && ownerPlayer.getTeam() != null) {
+			return ownerPlayer.getTeam().getName();
+		}
+
+		// 2. ownerId가 파티 ID이거나 오프라인 플레이어인 경우 파티 멤버들을 순회하여 팀 탐색
+		OpenPACServerAPI pacApi = OpenPACServerAPI.get(server);
+		if (pacApi != null && pacApi.getPartyManager() != null) {
+			IPartyManagerAPI partyManager = pacApi.getPartyManager();
+			IServerPartyAPI party = resolveParty(partyManager, ownerId);
+
+			if (party != null) {
+				for (ServerPlayer p : server.getPlayerList().getPlayers()) {
+					if (party.getMemberInfo(p.getUUID()) != null && p.getTeam() != null) {
+						return p.getTeam().getName();
+					}
+				}
+			}
+		}
+
+		// 3. 접속자가 없어 팀을 찾지 못했을 경우 RecruitsTeamManager의 오프라인 데이터 순회 (폴백)
+		for (RecruitsTeam team : TeamEvents.recruitsTeamManager.getTeams()) {
+			List<ChunkPos> claimedChunks = getClaimedChunksForTeam(level, team.getStringID());
+			if (claimedChunks.contains(chunkPos)) {
+				return team.getStringID();
+			}
+		}
+
+		return null;
+	}
 }

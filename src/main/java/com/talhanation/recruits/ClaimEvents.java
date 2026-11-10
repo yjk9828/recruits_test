@@ -17,7 +17,7 @@ import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.event.server.ServerStartingEvent;
 import java.util.*;
-
+import com.talhanation.recruits.world.RecruitsDiplomacyManager;
 @Mod.EventBusSubscriber(modid = Main.MOD_ID)
 public class ClaimEvents {
 
@@ -57,86 +57,125 @@ public class ClaimEvents {
         OPACBridge.registerClaimCostListener(event.getServer());
     }
 
-    private static void processSiegeTick(ServerLevel level) {
-        if (!OPACBridge.isOPACLoaded()) return;
+	private static void processSiegeTick(ServerLevel level) {
+		if (!OPACBridge.isOPACLoaded()) return;
 
-        MinecraftServer server = level.getServer();
-        Set<ChunkPos> activeChunksThisTick = new HashSet<>();
+		MinecraftServer server = level.getServer();
+		Set<ChunkPos> activeChunksThisTick = new HashSet<>();
 
-        for (ServerPlayer player : server.getPlayerList().getPlayers()) {
-            ChunkPos chunkPos = new ChunkPos(player.blockPosition());
+		for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+			ChunkPos chunkPos = new ChunkPos(player.blockPosition());
 
-            UUID ownerId = OPACBridge.getChunkOwnerId(level, chunkPos);
-            if (ownerId == null) continue;
+			UUID ownerId = OPACBridge.getChunkOwnerId(level, chunkPos);
+			if (ownerId == null) continue; // 무주지 무시
 
-            if (OPACBridge.isPlayerMemberOfChunkParty(level, chunkPos, player.getUUID())) {
-                continue;
-            }
+			// 본인이 속한 파티/청크면 침략자가 아니므로 패스
+			if (OPACBridge.isPlayerMemberOfChunkParty(level, chunkPos, player.getUUID())) {
+				continue;
+			}
 
-            // =========================================================
-            // 조건 검사 1: 지상 노출 검사 (머리 위 100칸 공기 블록 확인)
-            // =========================================================
-            if (isSkyObstructed(level, player)) {
-                player.sendSystemMessage(Component.literal("§c[점거 저지됨] 머리 위가 막혀 있습니다! 지상으로 나와 하늘을 확보하세요 (100칸 필요)."), true);
-                continue;
-            }
+			// =========================================================================
+			// [추가 1] 공격자 파벌 소속 검사
+			// =========================================================================
+			if (player.getTeam() == null) {
+				player.sendSystemMessage(Component.literal("§c[공성 불가] 소속된 파벌이 없어 타 세력 영토를 점거할 수 없습니다."), true);
+				continue;
+			}
+			String attackerTeam = player.getTeam().getName();
 
-            // 해당 청크(16x16) 범위 내 모든 엔티티 스캔
-            int minX = chunkPos.getMinBlockX();
-            int minZ = chunkPos.getMinBlockZ();
-            AABB chunkBox = new AABB(minX, level.getMinBuildHeight(), minZ, minX + 16, level.getMaxBuildHeight(), minZ + 16);
+			// =========================================================================
+			// [추가 2] 청크 소유 파벌 조회 및 선전포고(ENEMY) 여부 검사
+			// =========================================================================
+			String defenderTeam = OPACBridge.getChunkOwnerTeamName(level, chunkPos);
+			if (defenderTeam == null) {
+				continue; // 소유 파벌 정보를 특정할 수 없으면 스킵
+			}
 
-            List<Entity> entities = level.getEntities((Entity) null, chunkBox);
-            int myRecruitsCount = 0;
-            boolean otherRecruitsPresent = false;
+			// 같은 팀 영토는 점거 불가
+			if (attackerTeam.equals(defenderTeam)) {
+				continue;
+			}
 
-            for (Entity e : entities) {
-                if (!e.isAlive()) continue;
+			// '나(attackerTeam)'가 '가(defenderTeam)'에게 선전포고를 했는지 검사
+			RecruitsDiplomacyManager.DiplomacyStatus relation = 
+					TeamEvents.recruitsDiplomacyManager.getRelation(attackerTeam, defenderTeam);
 
-                if (e instanceof AbstractRecruitEntity recruit) {
-                    UUID recruitOwnerUUID = recruit.getOwnerUUID();
+			if (relation != RecruitsDiplomacyManager.DiplomacyStatus.ENEMY) {
+				player.sendSystemMessage(Component.literal("§c[공성 불가] 상대 파벌[" + defenderTeam + "]에게 먼저 선전포고(적대 선언)를 해야 점거할 수 있습니다!"), true);
+				continue;
+			}
 
-                    if (recruitOwnerUUID != null && recruitOwnerUUID.equals(player.getUUID())) {
-                        myRecruitsCount++;
-                    } else {
-                        otherRecruitsPresent = true;
-                    }
-                }
-            }
+			// =========================================================================
+			// 조건 검사 1: 지상 노출 검사 (머리 위 100칸 공기 블록 확인)
+			// =========================================================================
+			if (isSkyObstructed(level, player)) {
+				player.sendSystemMessage(Component.literal("§c[점거 저지됨] 머리 위가 막혀 있습니다! 지상으로 나와 하늘을 확보하세요 (100칸 필요)."), true);
+				continue;
+			}
 
-            // 조건 검사 2: 방어 병력 무력화 여부
-            if (otherRecruitsPresent) {
-                player.sendSystemMessage(Component.literal("§c[점거 저지됨] 청크 내에 잔존 방어 병력이 있습니다! 방어군을 먼저 무력화하세요."), true);
-                continue;
-            }
+			// 해당 청크(16x16) 범위 내 모든 엔티티 스캔
+			int minX = chunkPos.getMinBlockX();
+			int minZ = chunkPos.getMinBlockZ();
+			AABB chunkBox = new AABB(minX, level.getMinBuildHeight(), minZ, minX + 16, level.getMaxBuildHeight(), minZ + 16);
 
-            // 조건 검사 3: 아군 병사 2명 이상 주둔 여부
-            if (myRecruitsCount < MIN_RECRUITS_FOR_SIEGE) {
-                player.sendSystemMessage(Component.literal("§e[점거 대기] 아군 병사가 부족합니다 (" + myRecruitsCount + "/" + MIN_RECRUITS_FOR_SIEGE + "명 주둔 필요)"), true);
-                continue;
-            }
+			List<Entity> entities = level.getEntities((Entity) null, chunkBox);
+			int myRecruitsCount = 0;
+			boolean otherRecruitsPresent = false;
 
-            // 모든 조건 통과 (하늘 개방 + 병사 2명 이상 + 적 병사 전멸)
-            activeChunksThisTick.add(chunkPos);
+			for (Entity e : entities) {
+				if (!e.isAlive()) continue;
 
-            int secondsHeld = SIEGE_PROGRESS_MAP.getOrDefault(chunkPos, 0) + 1;
-            SIEGE_PROGRESS_MAP.put(chunkPos, secondsHeld);
+				if (e instanceof AbstractRecruitEntity recruit) {
+					UUID recruitOwnerUUID = recruit.getOwnerUUID();
 
-            player.sendSystemMessage(
-                Component.literal("§6⚔ [영토 점거 중] §e" + secondsHeld + " / " + SIEGE_REQUIRED_SECONDS + "초 §a(주둔 병력: " + myRecruitsCount + "명)"),
-                true
-            );
+					if (recruitOwnerUUID != null && recruitOwnerUUID.equals(player.getUUID())) {
+						myRecruitsCount++;
+					} else {
+						otherRecruitsPresent = true;
+					}
+				}
+			}
 
-            if (secondsHeld >= SIEGE_REQUIRED_SECONDS) {
-                OPACBridge.unclaimChunk(level, chunkPos);
-                SIEGE_PROGRESS_MAP.remove(chunkPos);
+			// 조건 검사 2: 방어 병력 무력화 여부
+			if (otherRecruitsPresent) {
+				player.sendSystemMessage(Component.literal("§c[점거 저지됨] 청크 내에 잔존 방어 병력이 있습니다! 방어군을 먼저 무력화하세요."), true);
+				continue;
+			}
 
-                notifyAllPlayers(server, Component.literal("§c🚩 [영토 함락] §f[" + player.getName().getString() + "] 세력이 [" + chunkPos.x + ", " + chunkPos.z + "] 청크의 수비대를 무력화하고 영토를 탈환(무주지화)했습니다!").withStyle(ChatFormatting.GOLD));
-            }
-        }
+			// 조건 검사 3: 아군 병사 2명 이상 주둔 여부
+			if (myRecruitsCount < MIN_RECRUITS_FOR_SIEGE) {
+				player.sendSystemMessage(Component.literal("§e[점거 대기] 아군 병사가 부족합니다 (" + myRecruitsCount + "/" + MIN_RECRUITS_FOR_SIEGE + "명 주둔 필요)"), true);
+				continue;
+			}
 
-        SIEGE_PROGRESS_MAP.keySet().removeIf(pos -> !activeChunksThisTick.contains(pos));
-    }
+			// 모든 조건 통과 (선전포고 완료 + 하늘 개방 + 병사 2명 이상 + 적 병사 전멸)
+			activeChunksThisTick.add(chunkPos);
+
+			int secondsHeld = SIEGE_PROGRESS_MAP.getOrDefault(chunkPos, 0) + 1;
+			SIEGE_PROGRESS_MAP.put(chunkPos, secondsHeld);
+
+			player.sendSystemMessage(
+				Component.literal("§6⚔ [영토 점거 중] §e" + secondsHeld + " / " + SIEGE_REQUIRED_SECONDS + "초 §a(주둔 병력: " + myRecruitsCount + "명)"),
+				true
+			);
+
+			// =========================================================================
+			// 점령 완료: Unclaim 처리 및 방어측의 자동 맞선전포고 발동
+			// =========================================================================
+			if (secondsHeld >= SIEGE_REQUIRED_SECONDS) {
+				OPACBridge.unclaimChunk(level, chunkPos);
+				SIEGE_PROGRESS_MAP.remove(chunkPos);
+
+				// [핵심] '가(방어팀)'도 '나(공격팀)'에게 즉시 자동 선전포고 상태로 강제 전환
+				TeamEvents.recruitsDiplomacyManager.setRelation(defenderTeam, attackerTeam, 
+						RecruitsDiplomacyManager.DiplomacyStatus.ENEMY, level);
+
+				notifyAllPlayers(server, Component.literal("§c🚩 [영토 함락] §f[" + attackerTeam + "] 파벌이 [" + defenderTeam + "]의 영토[" + chunkPos.x + ", " + chunkPos.z + "]를 무력화했습니다! 양 세력은 이제 전면전 상태에 돌입합니다!").withStyle(ChatFormatting.GOLD));
+			}
+		}
+
+		SIEGE_PROGRESS_MAP.keySet().removeIf(pos -> !activeChunksThisTick.contains(pos));
+	}
 
     /**
      * 플레이어 머리 위 100칸 이내에 장애물(공기가 아닌 블록)이 있는지 검사합니다.
