@@ -11,7 +11,10 @@ import net.minecraft.commands.Commands;
 import net.minecraft.commands.arguments.TeamArgument;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.scores.PlayerTeam;
 
 public class RecruitsBankCommands {
@@ -115,17 +118,71 @@ public class RecruitsBankCommands {
             return 0;
         }
 
-        if (TeamEvents.playerHasEnoughEmeralds(player, amount)) {
-            TeamEvents.doPayment(player, amount);
-            team.deposit(amount);
-            TeamEvents.recruitsTeamManager.save(player.serverLevel());
-            source.sendSuccess(() ->
-                    Component.literal("[" + team.getTeamDisplayName() + "] 금고에 " + amount + "G를 입금했습니다. (총 잔액: " + team.getBalance() + "G)")
-                            .withStyle(ChatFormatting.GREEN), false);
-            return 1;
-        } else {
-            source.sendFailure(Component.literal("인벤토리에 충분한 화폐가 없습니다.").withStyle(ChatFormatting.RED));
+        ItemStack currencyStack = TeamEvents.getCurrency();
+        Item currencyItem = currencyStack.getItem();
+        boolean isEmeraldCurrency = (currencyItem == Items.EMERALD);
+
+        // 1. 인벤토리 내 화폐 및 에메랄드 블록 보유량 계산
+        Inventory inv = player.getInventory();
+        int looseCount = 0;
+        int blockCount = 0;
+
+        for (int i = 0; i < inv.getContainerSize(); i++) {
+            ItemStack stack = inv.getItem(i);
+            if (stack.isEmpty()) continue;
+
+            if (stack.getItem() == currencyItem) {
+                looseCount += stack.getCount();
+            } else if (isEmeraldCurrency && stack.getItem() == Items.EMERALD_BLOCK) {
+                blockCount += stack.getCount();
+            }
+        }
+
+        int totalValue = looseCount + (blockCount * 9);
+        if (totalValue < amount) {
+            source.sendFailure(Component.literal("인벤토리에 충분한 화폐가 없습니다. (보유: " + totalValue + "G / 필요: " + amount + "G)")
+                    .withStyle(ChatFormatting.RED));
             return 0;
+        }
+
+        // 2. 낱개 화폐 우선 차감 후 부족분은 에메랄드 블록(1개당 9G)으로 차감
+        int looseToConsume = Math.min(looseCount, amount);
+        int remaining = amount - looseToConsume;
+        int blocksToConsume = (remaining > 0) ? (int) Math.ceil(remaining / 9.0) : 0;
+        int changeToReturn = (blocksToConsume * 9) - remaining;
+
+        consumeItem(inv, currencyItem, looseToConsume);
+        if (blocksToConsume > 0) {
+            consumeItem(inv, Items.EMERALD_BLOCK, blocksToConsume);
+        }
+
+        // 3. 블록 단위 차감 후 남은 거스름돈 지급
+        if (changeToReturn > 0) {
+            ItemStack changeStack = new ItemStack(currencyItem, changeToReturn);
+            if (!inv.add(changeStack)) {
+                player.drop(changeStack, false);
+            }
+        }
+
+        team.deposit(amount);
+        TeamEvents.recruitsTeamManager.save(player.serverLevel());
+
+        source.sendSuccess(() ->
+                Component.literal("[" + team.getTeamDisplayName() + "] 금고에 " + amount + "G를 입금했습니다. (총 잔액: " + team.getBalance() + "G)")
+                        .withStyle(ChatFormatting.GREEN), false);
+        return 1;
+    }
+
+    private static void consumeItem(Inventory inv, Item targetItem, int countToRemove) {
+        int left = countToRemove;
+        for (int i = 0; i < inv.getContainerSize(); i++) {
+            if (left <= 0) break;
+            ItemStack stack = inv.getItem(i);
+            if (!stack.isEmpty() && stack.getItem() == targetItem) {
+                int take = Math.min(stack.getCount(), left);
+                stack.shrink(take);
+                left -= take;
+            }
         }
     }
 }
